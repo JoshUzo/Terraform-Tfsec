@@ -1,0 +1,39 @@
+# Terraform local state
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Terraform crash logs
+crash.log
+
+# Terraform variable files (often contain secrets)
+*.tfvars
+*.tfvars.json
+
+# Terraform lock file (optional to track)
+.terraform.lock.hcl
+
+# tfsec or security scan outputs
+tfsec-results.*
+*.sarif
+*.json
+
+# Local module/package artifacts
+*.zip
+*.tar.gz
+
+# Editor and system files
+.vscode/
+.idea/
+*.swp
+*.bak
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Node/npm files (if CI tooling)
+node_modules/
+
+# Python cache (if using Python scripts)
+__pycache__/
+*.pyc
