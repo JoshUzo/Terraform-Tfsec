@@ -29,9 +29,20 @@ jobs:
     - name: Detect changed Terraform directory
       id: detect_folder
       run: |
-        echo "Detecting changed top-level folder with .tf files..."
+        echo "Detecting changed top-level Terraform folders..."
 
-        CHANGED_DIR=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          BASE_REF="origin/${{ github.base_ref }}"
+        else
+          BASE_REF="${{ github.event.before }}"
+        fi
+
+        # fallback if github.event.before is empty (first push or new branch)
+        if [[ -z "$BASE_REF" || "$BASE_REF" == "0000000000000000000000000000000000000000" ]]; then
+          BASE_REF="HEAD~1"
+        fi
+
+        CHANGED_DIR=$(git diff --name-only "$BASE_REF" HEAD |
           grep -E '\.tf$|\.tfvars$' |
           grep -v '^modules/' |
           grep -v '^environments/' |
@@ -39,14 +50,15 @@ jobs:
           sort -u |
           head -n 1)
 
+        echo "CHANGED_DIR=$CHANGED_DIR"
 
         if [[ -z "$CHANGED_DIR" ]]; then
-          echo "No relevant .tf files changed in a root-level folder."
+          echo "No Terraform directories changed."
           echo "skip=true" >> $GITHUB_OUTPUT
         else
           echo "Found changed folder: $CHANGED_DIR"
           echo "dir=$CHANGED_DIR" >> $GITHUB_OUTPUT
-         fi
+        fi
 
 
     - name: Exit if no .tf directory changed
