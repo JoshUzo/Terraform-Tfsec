@@ -3,11 +3,6 @@ variable "aws_region" {
   type        = string
 }
 
-variable "bucket_name" {
-  description = "Name of the S3 bucket"
-  type        = string
-}
-
 variable "enable_versioning" {
   description = "Enable versioning on the S3 bucket"
   type        = bool
@@ -24,4 +19,25 @@ variable "tags" {
   description = "Tags to apply to the S3 bucket"
   type        = map(string)
   default     = {}
+}
+
+variable "organization" {
+  description = "Company or organization prefix"
+  type        = string
+}
+
+variable "team" {
+  description = "Team or project name"
+  type        = string
+}
+
+variable "env" {
+  description = "Deployment environment (dev, uat, prod)"
+  type        = string
+}
+
+variable "resource_type" {
+  description = "Type of resource (e.g., s3, rds, ec2)"
+  type        = string
+  default     = "s3"
 }
