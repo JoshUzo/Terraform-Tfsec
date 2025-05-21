@@ -1,37 +1,68 @@
-name: Terraform CI for Dev Environment
+name: Terraform CI (Dynamic Folder on .tf Change)
 
 on:
   push:
-    branches: [main]
-      
+    branches:
+      - main
+    paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
   pull_request:
-    branches: [main]
-    
+    branches:
+      - main
+    paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
+
 jobs:
-  terraform-dev:
-    name: Terraform Plan + tfsec (Dev)
+  terraform-dynamic:
+    name: Terraform Plan + tfsec (dynamic folder)
     runs-on: ubuntu-latest
     env:
       AWS_REGION: "us-east-2"
-      S3_BUCKET: "tfsec-logs-bucket"  
-    
-    defaults:
-      run:
-        working-directory: environments/dev
+      S3_BUCKET: "tfsec-logs-bucket"
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Detect changed Terraform directory
+      id: detect_folder
+      run: |
+        echo "Detecting changed top-level folder with .tf files..."
+
+        CHANGED_DIR=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} |
+          grep '\.tf$' |
+          cut -d/ -f1 |
+          sort -u |
+          head -n 1)
+
+        if [[ -z "$CHANGED_DIR" ]]; then
+          echo "No relevant .tf files changed in a root-level folder."
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "Found changed folder: $CHANGED_DIR"
+          echo "dir=$CHANGED_DIR" >> $GITHUB_OUTPUT
+         fi
+
+
+    - name: Exit if no .tf directory changed
+      if: steps.detect_folder.outputs.skip == 'true'
+      run: echo "Skipping workflow - no .tf file changes in user directories."
+
     - name: Setup Terraform
+      if: steps.detect_folder.outputs.skip != 'true'
       uses: hashicorp/setup-terraform@v2
       with:
         terraform_wrapper: false
 
     - name: Terraform Format Check
+      if: steps.detect_folder.outputs.skip != 'true'
       run: terraform fmt #-check
+      working-directory: ${{ steps.detect_folder.outputs.dir }}
 
     - name: Configure AWS credentials
+      if: steps.detect_folder.outputs.skip != 'true'
       uses: aws-actions/configure-aws-credentials@v2
       with:
         aws-access-key-id: ${{ secrets.ACCESS_KEY }}
@@ -39,38 +70,45 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Terraform Init
+      if: steps.detect_folder.outputs.skip != 'true'
       run: terraform init
+      working-directory: ${{ steps.detect_folder.outputs.dir }}
 
     - name: Terraform Validate
+      if: steps.detect_folder.outputs.skip != 'true'
       run: terraform validate
+      working-directory: ${{ steps.detect_folder.outputs.dir }}
 
-    - name: Terraform Plan
-      run: terraform plan
+    - name: Terraform Plan (uses vars/dev.tfvars)
+      if: steps.detect_folder.outputs.skip != 'true'
+      run: terraform plan -var-file="vars/dev.tfvars"
+      working-directory: ${{ steps.detect_folder.outputs.dir }}
 
     - name: Install tfsec
+      if: steps.detect_folder.outputs.skip != 'true'
       run: |
         curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64 -o tfsec
         chmod +x tfsec
         sudo mv tfsec /usr/local/bin/
-        
+
     - name: Run tfsec and generate report
-      id: tfsec
+      if: steps.detect_folder.outputs.skip != 'true'
       run: |
         tfsec --format json --out tfsec-results.json
+      working-directory: ${{ steps.detect_folder.outputs.dir }}
 
     - name: Upload tfsec report as artifact
-      if: always()  # ensures this runs even if tfsec fails
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: tfsec-results
-        path: environments/dev/tfsec-results.json
+        path: ${{ steps.detect_folder.outputs.dir }}/tfsec-results.json
 
     - name: Upload tfsec report to S3
       if: always()
       run: |
         TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
-         # Determine commit ID based on event type
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           COMMIT_ID="${{ github.event.pull_request.head.sha }}"
         else
@@ -80,7 +118,7 @@ jobs:
         COMMIT_SHORT=${COMMIT_ID::7}
         echo "Uploading with commit ID: $COMMIT_SHORT"
 
-        aws s3 cp tfsec-results.json s3://$S3_BUCKET/tfsec-results-$TIMESTAMP-$COMMIT_SHORT.json
+        aws s3 cp "${{ steps.detect_folder.outputs.dir }}/tfsec-results.json" s3://$S3_BUCKET/tfsec-results-$TIMESTAMP-$COMMIT_SHORT.json
 
 
 
