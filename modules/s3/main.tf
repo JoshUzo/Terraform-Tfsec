@@ -1,11 +1,9 @@
 #sample comment
 
-provider "aws" {
-  region = var.aws_region
-}
+
 
 resource "aws_s3_bucket" "this" {
-  bucket = local.bucket_name
+  bucket = var.bucket_name
   tags   = local.default_tags
 }
 

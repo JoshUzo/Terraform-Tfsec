@@ -41,3 +41,8 @@ variable "resource_type" {
   type        = string
   default     = "s3"
 }
+
+variable "bucket_name" {
+  description = "provides list of the bucket nmes we will create with module"
+  type        = list(string)
+}
