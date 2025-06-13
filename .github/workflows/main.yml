@@ -83,8 +83,9 @@ jobs:
       if: always()
       run: |
         TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-        COMMIT_SHORT=${{ github.sha::7 }}
+        COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
         aws s3 cp "${{ matrix.folder }}/tfsec-results.json" s3://$S3_BUCKET/tfsec-results-${{ matrix.folder }}-$TIMESTAMP-$COMMIT_SHORT.json
+
 
 
 
