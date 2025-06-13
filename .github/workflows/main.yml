@@ -2,7 +2,7 @@ name: Terraform CI for Dev Environment
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
     paths:
       - 'user*/**'
 
