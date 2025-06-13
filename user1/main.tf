@@ -2,24 +2,18 @@ locals {
   s3_buckets = {
     raw = {
       purpose = "raw"
-      additional_tags = {
-        Retention = "30d"
       }
     }
     processed = {
       purpose = "processed"
-      #additional_tags = {}
     }
     logs = {
       purpose = "logs"
-      additional_tags = {}
     }
     data = {
       purpose = "data"
-      #additional_tags = {}
     }
   }
-}
 
 
 module "s3_raw_data" {
