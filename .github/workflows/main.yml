@@ -4,90 +4,86 @@ on:
   push:
     branches: [main]
     paths:
-      - 'user*/**'  # Only trigger if files under user* folders change
+      - 'user*/**'
+  workflow_dispatch:
 
 jobs:
-  detect-changes:
-    name: Detect Changed User Folders
+  detect-folders:
+    name: Detect All User Folders
     runs-on: ubuntu-latest
 
     outputs:
       folders: ${{ steps.set.outputs.folders }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Get changed user folders
-      id: set
-      run: |
-        echo "Detecting changed folders starting with 'user'..."
-        folders=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^user' | cut -d/ -f1 | sort -u | uniq)
-        
-        # Convert to JSON array
-        json_array=$(jq -nc --arg folders "$folders" '$folders | split(" ")')
-        echo "Detected folders JSON: $json_array"
-        echo "folders=$json_array" >> $GITHUB_OUTPUT
+      - name: Find user folders
+        id: set
+        run: |
+          echo "Finding user* folders..."
+          folders=$(find . -maxdepth 1 -type d -name "user*" -exec basename {} \; | tr '\n' ' ')
+          echo "folders=$folders"
+          echo "folders=${folders}" >> $GITHUB_OUTPUT
 
   run-ci:
-    name: Terraform CI per Changed Folder
-    needs: detect-changes
+    name: Terraform CI for All User Folders
+    needs: detect-folders
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
-        folder: ${{ fromJson(needs.detect-changes.outputs.folders) }}
+        folder: ${{ fromJson('["' + needs.detect-folders.outputs.folders + '"]') }}
 
     env:
       AWS_REGION: "us-east-2"
       S3_BUCKET: "tfsec-logs-bucket"
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
-      with:
-        terraform_wrapper: false
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.ACCESS_KEY }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Terraform Init
-      run: terraform init
-      working-directory: ${{ matrix.folder }}
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ matrix.folder }}
 
-    - name: Terraform Validate
-      run: terraform validate
-      working-directory: ${{ matrix.folder }}
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ matrix.folder }}
 
-    - name: Terraform Plan
-      run: terraform plan -var-file="dev.tfvars"
-      working-directory: ${{ matrix.folder }}
+      - name: Terraform Plan
+        run: terraform plan -var-file="dev.tfvars"
+        working-directory: ${{ matrix.folder }}
 
-    - name: Install tfsec
-      run: |
-        curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64 -o tfsec
-        chmod +x tfsec
-        sudo mv tfsec /usr/local/bin/
+      - name: Install tfsec
+        run: |
+          curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64 -o tfsec
+          chmod +x tfsec
+          sudo mv tfsec /usr/local/bin/
 
-    - name: Run tfsec and generate report
-      run: tfsec --format json --out tfsec-results.json
-      working-directory: ${{ matrix.folder }}
+      - name: Run tfsec and generate report
+        run: tfsec --format json --out tfsec-results.json
+        working-directory: ${{ matrix.folder }}
 
-    - name: Upload tfsec report to S3
-      if: always()
-      run: |
-        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-        COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
-        aws s3 cp "${{ matrix.folder }}/tfsec-results.json" s3://$S3_BUCKET/tfsec-results-${{ matrix.folder }}-$TIMESTAMP-$COMMIT_SHORT.json
-
-
-
+      - name: Upload tfsec report to S3
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          aws s3 cp "${{ matrix.folder }}/tfsec-results.json" s3://$S3_BUCKET/tfsec-results-${{ matrix.folder }}-$TIMESTAMP-$COMMIT_SHORT.json
 
 
 
