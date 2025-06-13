@@ -11,21 +11,20 @@ jobs:
   detect-folders:
     name: Detect All User Folders
     runs-on: ubuntu-latest
-
     outputs:
-      folders: ${{ steps.set.outputs.folders }}
+      matrix: ${{ steps.set.outputs.matrix }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Find user folders
+      - name: Find user folders and format JSON array
         id: set
         run: |
-          echo "Finding user* folders..."
-          folders=$(find . -maxdepth 1 -type d -name "user*" -exec basename {} \; | tr '\n' ' ')
-          echo "folders=$folders"
-          echo "folders=${folders}" >> $GITHUB_OUTPUT
+          echo "Finding user folders..."
+          folders=$(find . -maxdepth 1 -type d -name "user*" -exec basename {} \;)
+          json_array=$(printf '%s\n' $folders | jq -R . | jq -s .)
+          echo "matrix=$json_array" >> $GITHUB_OUTPUT
 
   run-ci:
     name: Terraform CI for All User Folders
@@ -34,7 +33,7 @@ jobs:
 
     strategy:
       matrix:
-        folder: ${{ fromJson('["' + needs.detect-folders.outputs.folders + '"]') }}
+        folder: ${{ fromJson(needs.detect-folders.outputs.matrix) }}
 
     env:
       AWS_REGION: "us-east-2"
@@ -84,7 +83,3 @@ jobs:
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           aws s3 cp "${{ matrix.folder }}/tfsec-results.json" s3://$S3_BUCKET/tfsec-results-${{ matrix.folder }}-$TIMESTAMP-$COMMIT_SHORT.json
-
-
-
-
