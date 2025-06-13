@@ -22,7 +22,7 @@ jobs:
       id: set
       run: |
         echo "Detecting engineer folders with changes..."
-        folders=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^engineer' | cut -d/ -f1 | sort -u | uniq | tr '\n' ' ')
+        folders=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^user' | cut -d/ -f1 | sort -u | uniq | tr '\n' ' ')
         echo "Changed folders: $folders"
         echo "folders=$folders" >> $GITHUB_OUTPUT
 
