@@ -1,10 +1,8 @@
 #sample comment
 
-
-
 resource "aws_s3_bucket" "this" {
-  bucket = var.bucket_name
-  tags   = local.default_tags
+  bucket = local.bucket_name
+  tags   = local.all_tags
 }
 
 resource "aws_s3_bucket_versioning" "this" {

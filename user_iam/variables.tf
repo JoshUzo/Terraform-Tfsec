@@ -3,27 +3,9 @@ variable "aws_region" {
   type        = string
 }
 
-variable "enable_versioning" {
-    description = "enabling versioning"
-    type = bool
-}
-
-variable "sse_algorithm" {
-    description = "encrypt s3 data"
-    type = string
-
-}
-
-variable "additional_tags" {
-    description = "maps of tags"
-    type        = map(string)
-    default     = {}
-}
-
 variable "organization" {
   description = "Company or organization prefix"
   type        = string
-  default     = "htown"
 }
 
 variable "team" {
@@ -39,7 +21,19 @@ variable "env" {
 variable "resource_type" {
   description = "Type of resource (e.g., s3, rds, ec2)"
   type        = string
-  default     = "s3"
+  default     = "iam"
 }
 
-
+variable "iam_roles" {
+  type = map(object({
+    purpose              = string
+    assume_role_services = list(string)
+    attach_basic_policy  = bool
+    attach_xray_policy   = bool
+    inline_policies = list(object({
+      name        = string
+      policy_json = string
+    }))
+    managed_policy_arns = list(string)
+  }))
+}

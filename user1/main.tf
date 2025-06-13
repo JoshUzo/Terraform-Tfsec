@@ -1,19 +1,38 @@
-# main comment
-provider "aws" {
-  region = var.aws_region
+locals {
+  s3_buckets = {
+    raw = {
+      purpose = "raw"
+      additional_tags = {
+        Retention = "30d"
+      }
+    }
+    processed = {
+      purpose = "processed"
+      #additional_tags = {}
+    }
+    logs = {
+      purpose = "logs"
+      additional_tags = {}
+    }
+    data = {
+      purpose = "data"
+      #additional_tags = {}
+    }
+  }
 }
+
 
 module "s3_raw_data" {
   source            = "../modules/s3"
-  for_each          = toset(var.bucket_name)
+  for_each          = local.s3_buckets
 
+  purpose           = each.value.purpose
+  additional_tags   = each.value.additional_tags
+  resource_type     = var.resource_type
   aws_region        = var.aws_region
   enable_versioning = var.enable_versioning
   sse_algorithm     = var.sse_algorithm
-  tags              = var.tags
   organization      = var.organization
   env               = var.env
   team              = var.team
-
-  bucket_name       = each.value
 }

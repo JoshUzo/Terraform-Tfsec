@@ -9,9 +9,9 @@ terraform {
   }
 }
 
-#provider "aws" {
-#  region = "us-east-2"
-#}
+provider "aws" {
+  region = "us-east-2"
+}
 
 resource "aws_s3_bucket" "insecure_bucket" {
   bucket = "my-insecure-bucket-dev"

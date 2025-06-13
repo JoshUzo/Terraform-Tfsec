@@ -15,8 +15,8 @@ variable "sse_algorithm" {
   default     = "AES256"
 }
 
-variable "tags" {
-  description = "Tags to apply to the S3 bucket"
+variable "additional_tags" {
+  description = "Additional Tags to merge with default ones to the S3 bucket"
   type        = map(string)
   default     = {}
 }
@@ -42,7 +42,8 @@ variable "resource_type" {
   default     = "s3"
 }
 
-variable "bucket_name" {
-  description = "provides list of the bucket nmes we will create with module"
+variable "purpose" {
+  description = "The functional purpose of the bucket"
   type        = string
 }
+
