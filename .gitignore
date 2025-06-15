@@ -7,7 +7,6 @@
 crash.log
 
 # Terraform variable files (often contain secrets)
-*.tfvars
 *.tfvars.json
 
 # Terraform lock file (optional to track)
