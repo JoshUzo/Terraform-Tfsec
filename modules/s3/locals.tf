@@ -10,5 +10,5 @@ locals {
   }
 
   
-all_tags = merge(default_tags, var.additional_tags)
+all_tags = local.default_tags
 }

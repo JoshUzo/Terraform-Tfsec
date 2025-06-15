@@ -15,12 +15,6 @@ variable "sse_algorithm" {
   default     = "AES256"
 }
 
-variable "additional_tags" {
-  description = "Additional Tags to merge with default ones to the S3 bucket"
-  type        = map(string)
-  default     = {}
-}
-
 variable "organization" {
   description = "Company or organization prefix"
   type        = string
