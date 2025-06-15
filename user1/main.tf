@@ -23,7 +23,6 @@ module "s3_raw_data" {
   for_each          = local.s3_buckets
 
   purpose           = each.value.purpose
-  additional_tags   = each.value.additional_tags
   resource_type     = var.resource_type
   aws_region        = var.aws_region
   enable_versioning = var.enable_versioning
