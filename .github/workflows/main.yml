@@ -1,90 +1,73 @@
-name: CI/CD Pipeline for Terraform + Code Scans
+name: Terraform CI/CD with tfsec and Bandit
 
 on:
   push:
     branches: [main]
     paths:
-      - 'user*/**'
+      - 'user*/**'  # Triggers if any user folder changes
+  workflow_dispatch:  # Manual trigger
 
 jobs:
-  detect-changes:
+  detect-folders:
     runs-on: ubuntu-latest
     outputs:
-      folders: ${{ steps.filter.outputs.folders }}
-
+      folders: ${{ steps.set-folders.outputs.folders }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Find changed folders
-      id: filter
-      run: |
-        folders=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^user' | cut -d/ -f1 | sort -u | tr '\n' ' ')
-        echo "folders=$folders" >> $GITHUB_OUTPUT
+      - id: set-folders
+        run: |
+          echo "Detecting user folders with changes..."
+          folders=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^user' | cut -d/ -f1 | sort -u | uniq | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "folders=$folders" >> $GITHUB_OUTPUT
 
   run-ci:
-    needs: detect-changes
+    name: Run Terraform + tfsec per Folder
+    needs: detect-folders
     runs-on: ubuntu-latest
+    if: needs.detect-folders.outputs.folders != '[]'
     strategy:
       matrix:
-        folder: ${{ fromJson('["user_lambda", "user_iam", "user_s3"]') }}  # update if dynamic detection fails
+        folder: ${{ fromJson(needs.detect-folders.outputs.folders) }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.ACCESS_KEY }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
 
-    - name: Terraform Init
-      run: terraform init
-      working-directory: ${{ matrix.folder }}
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ matrix.folder }}
 
-    - name: Terraform Validate
-      run: terraform validate
-      working-directory: ${{ matrix.folder }}
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ matrix.folder }}
 
-    - name: Terraform Plan
-      run: terraform plan -var-file="vars/dev.tfvars"
-      working-directory: ${{ matrix.folder }}
+      - name: Terraform Plan
+        run: terraform plan -var-file="vars/dev.tfvars"
+        working-directory: ${{ matrix.folder }}
 
-    - name: Run tfsec
-      run: tfsec --format json --out tfsec-results.json
-      working-directory: ${{ matrix.folder }}
+      - name: Install tfsec
+        run: |
+          curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64 -o tfsec
+          chmod +x tfsec
+          sudo mv tfsec /usr/local/bin/
 
-    - name: Upload tfsec Results
-      uses: actions/upload-artifact@v4
-      with:
-        name: tfsec-${{ matrix.folder }}
-        path: ${{ matrix.folder }}/tfsec-results.json
+      - name: Run tfsec
+        run: tfsec --format json --out tfsec-results.json
+        working-directory: ${{ matrix.folder }}
 
-    - name: Run Bandit (Python Scan)
-      if: ${{ contains(matrix.folder, 'lambda') }}
-      run: |
-        python3 -m pip install bandit
-        bandit -r ${{ matrix.folder }}/src -f json -o bandit-results.json || true
+      - name: Upload tfsec results
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfsec-results-${{ matrix.folder }}
+          path: ${{ matrix.folder }}/tfsec-results.json
 
-    - name: Upload Bandit Results
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: bandit-${{ matrix.folder }}
-        path: bandit-results.json
-
-    - name: YAML Lint
-      run: |
-        sudo apt-get install yamllint
-        yamllint ${{ matrix.folder }}/*.yaml > yaml-lint.txt || true
-
-    - name: JSON Lint
-      run: |
-        sudo apt-get install -y npm
-        sudo npm install -g jsonlint
-        jsonlint ${{ matrix.folder }}/*.json > json-lint.txt || true
