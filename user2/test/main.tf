@@ -1,2 +1,0 @@
-terraform {}
-# another test line
