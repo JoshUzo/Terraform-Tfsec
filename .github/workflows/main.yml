@@ -79,6 +79,11 @@ jobs:
           name: tfsec-results-${{ matrix.folder }}
           path: ${{ matrix.folder }}/tfsec-results.json
 
+      - name: Install Bandit
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install bandit
+    
       - name: Run Bandit (if Python code is found)
         run: |
           echo "Searching for Python files in ${{ matrix.folder }}..."
