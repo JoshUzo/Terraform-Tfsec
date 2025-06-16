@@ -73,3 +73,20 @@ jobs:
           name: tfsec-results-${{ matrix.folder }}
           path: ${{ matrix.folder }}/tfsec-results.json
 
+      - name: Run Bandit (if Python code is found)
+        run: |
+          echo "Searching for Python files in ${{ matrix.folder }}..."
+          PY_FILES=$(find ${{ matrix.folder }} -type f -name "*.py")
+          if [ -n "$PY_FILES" ]; then
+            echo "Python files found, running Bandit..."
+            bandit -r ${{ matrix.folder }} -o bandit-results.txt -f txt || true
+          else
+            echo "No Python files found."
+            touch bandit-results.txt
+          fi
+
+      - name: Upload Bandit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-results-${{ matrix.folder }}
+          path: bandit-results.txt
