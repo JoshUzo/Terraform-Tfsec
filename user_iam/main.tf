@@ -10,7 +10,7 @@ module "iam_roles" {
   team                   = var.team
   env                    = var.env
 
-  #role_name              = ""  # optional override
+  #role_name              = ""  # optional override for role name
   assume_role_services   = each.value.assume_role_services
   attach_basic_policy    = each.value.attach_basic_policy
   attach_xray_policy     = each.value.attach_xray_policy
