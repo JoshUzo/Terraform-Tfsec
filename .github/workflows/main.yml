@@ -85,14 +85,14 @@ jobs:
           PY_FILES=$(find ${{ matrix.folder }} -type f -name "*.py")
           if [ -n "$PY_FILES" ]; then
             echo "Python files found, running Bandit..."
-            bandit -r ${{ matrix.folder }} -o bandit-results.txt -f txt || true
+            bandit -r ${{ matrix.folder }} -o ${{ matrix.folder }}/bandit-results.txt -f txt || true
           else
             echo "No Python files found."
-            touch bandit-results.txt
+            touch ${{ matrix.folder }}/bandit-results.txt
           fi
 
       - name: Upload Bandit results
         uses: actions/upload-artifact@v4
         with:
           name: bandit-results-${{ matrix.folder }}
-          path: bandit-results.txt
+          path: ${{ matrix.folder }}/bandit-results.txt
