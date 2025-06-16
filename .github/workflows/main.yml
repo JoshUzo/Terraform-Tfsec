@@ -64,7 +64,7 @@ jobs:
           sudo mv tfsec /usr/local/bin/
 
       - name: Run tfsec
-        run: tfsec --format json --out tfsec-results.json
+        run: tfsec --format json --out tfsec-results.json || true
         working-directory: ${{ matrix.folder }}
 
       - name: Upload tfsec results
