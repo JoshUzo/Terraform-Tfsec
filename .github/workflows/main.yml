@@ -45,6 +45,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
+      - name: Zip Lambda Code if applicable
+        run: |
+          cd ${{ matrix.folder }}
+          mkdir -p build
+          zip -r build/test_lambda.zip . -x "*.tf" -x "*.tfvars" -x "build/*" -x ".terraform/*" || echo "No files to zip"
+
       - name: Terraform Init
         run: terraform init
         working-directory: ${{ matrix.folder }}
