@@ -1,4 +1,4 @@
-name: Terraform CI/CD with tfsec and Bandit
+name: Terraform CI/CD with tfsec and SonarQube
 
 on:
   push:
@@ -79,25 +79,20 @@ jobs:
           name: tfsec-results-${{ matrix.folder }}
           path: ${{ matrix.folder }}/tfsec-results.json
 
-      - name: Install Bandit
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install bandit
-    
-      - name: Run Bandit (if Python code is found)
-        run: |
-          echo "Searching for Python files in ${{ matrix.folder }}..."
-          PY_FILES=$(find ${{ matrix.folder }} -type f -name "*.py")
-          if [ -n "$PY_FILES" ]; then
-            echo "Python files found, running Bandit..."
-            bandit -r ${{ matrix.folder }} -o ${{ matrix.folder }}/bandit-results.txt -f txt || true
-          else
-            echo "No Python files found."
-            touch ${{ matrix.folder }}/bandit-results.txt
-          fi
 
-      - name: Upload Bandit results
-        uses: actions/upload-artifact@v4
-        with:
-          name: bandit-results-${{ matrix.folder }}
-          path: ${{ matrix.folder }}/bandit-results.txt
+      - name: Install SonarScanner
+        run: |
+          wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+          unzip sonar-scanner-cli-5.0.1.3006-linux.zip
+          mv sonar-scanner-5.0.1.3006-linux sonar-scanner
+          echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
+
+      - name: Run SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
+            -Dsonar.sources=${{ matrix.folder }} \
+            -Dsonar.host.url=http://18.191.129.160:9000 \
+            -Dsonar.login=$SONAR_TOKEN || true
