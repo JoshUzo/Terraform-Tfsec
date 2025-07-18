@@ -99,14 +99,6 @@ jobs:
             | tee sonarqube-output.log || true
         
 
-      - name: Upload SonarQube Log to S3
-        run: |
-          if [ -f sonarqube-output.log ]; then
-            aws s3 cp sonarqube-output.log s3://sq-log-bucket/sonarqube-logs/${{ matrix.folder }}-sonarqube-output.log
-          else
-            echo "Log file not found, skipping upload."
-          fi
-
       - name: Fetch SonarQube Issues
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
