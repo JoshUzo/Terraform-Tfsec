@@ -96,7 +96,8 @@ jobs:
             -Dsonar.sources=${{ matrix.folder }} \
             -Dsonar.host.url=http://18.191.129.160:9000 \
             -Dsonar.login=$SONAR_TOKEN || true
-
+            | tee sonarqube-output.log
+             
       - name: Upload SonarQube Log to S3
         run: |
           aws s3 cp sonarqube-output.log s3://sq-log-bucket/sonarqube-logs/${{ matrix.folder }}-sonarqube-output.log
