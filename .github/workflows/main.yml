@@ -96,8 +96,30 @@ jobs:
             -Dsonar.sources=${{ matrix.folder }} \
             -Dsonar.host.url=http://18.191.129.160:9000 \
             -Dsonar.login=$SONAR_TOKEN \
-          | tee sonarqube-output.log
-             
+            | tee sonarqube-output.log || true
+        
+
       - name: Upload SonarQube Log to S3
         run: |
-          aws s3 cp sonarqube-output.log s3://sq-log-bucket/sonarqube-logs/${{ matrix.folder }}-sonarqube-output.log
+          if [ -f sonarqube-output.log ]; then
+            aws s3 cp sonarqube-output.log s3://sq-log-bucket/sonarqube-logs/${{ matrix.folder }}-sonarqube-output.log
+          else
+            echo "Log file not found, skipping upload."
+          fi
+
+      - name: Fetch SonarQube Issues
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          curl -s -u "${SONAR_TOKEN}:" \
+            "${SONAR_HOST_URL}/api/issues/search?componentKeys=htown-sp-sonarqube-${{ matrix.folder }}" \
+            -o sonarqube-results.json || echo "Failed to fetch SonarQube issues"
+
+      - name: Upload SonarQube Issues to S3
+        run: |
+          if [ -f sonarqube-results.json ]; then
+            aws s3 cp sonarqube-results.json s3://sq-log-bucket/sonarqube/${{ matrix.folder }}/sonarqube-results.json
+          else
+            echo "Issues file not found, skipping upload."
+          fi
