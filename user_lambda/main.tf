@@ -1,4 +1,4 @@
-#new comment9.5
+#new comment10
 module "lambda_functions" {
   source = "../modules/lambda"
   for_each = var.lambda_functions
