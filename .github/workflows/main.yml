@@ -95,8 +95,8 @@ jobs:
             -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
             -Dsonar.sources=${{ matrix.folder }} \
             -Dsonar.host.url=http://18.191.129.160:9000 \
-            -Dsonar.login=$SONAR_TOKEN || true
-            | tee sonarqube-output.log
+            -Dsonar.login=$SONAR_TOKEN || true \
+          | tee sonarqube-output.log
              
       - name: Upload SonarQube Log to S3
         run: |
