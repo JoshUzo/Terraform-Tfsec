@@ -14,13 +14,14 @@ jobs:
 
     env:
       AWS_REGION: us-east-2
+      KICS_S3_BUCKET: kics-log-bucket  # <-- Replace with your actual S3 bucket name
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials (optional for S3 upload)
-        if: ${{ secrets.ACCESS_KEY && secrets.AWS_SECRET_ACCESS_KEY }}
+        if: ${{ secrets.ACCESS_KEY != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.ACCESS_KEY }}
@@ -51,9 +52,9 @@ jobs:
           path: kics-output/
 
       - name: Upload KICS Results to S3 (optional)
-        if: ${{ secrets.ACCESS_KEY && secrets.AWS_SECRET_ACCESS_KEY }}
+        if: ${{ secrets.ACCESS_KEY != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
         run: |
           for file in kics-output/*; do
             echo "Uploading $file to S3..."
-            aws s3 cp "$file" s3://your-kics-bucket/kics-results/
+            aws s3 cp "$file" s3://$KICS_S3_BUCKET/kics-results/
           done
