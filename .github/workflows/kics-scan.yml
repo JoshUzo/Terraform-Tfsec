@@ -14,7 +14,7 @@ jobs:
 
     env:
       AWS_REGION: us-east-2
-      KICS_S3_BUCKET: kics-log-bucket  # replace with your actual bucket name
+      KICS_S3_BUCKET: kics-log-bucket
 
     steps:
       - name: Checkout Repository
@@ -29,33 +29,16 @@ jobs:
             echo "upload_enabled=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Configure AWS credentials (optional for S3 upload)
-        if: steps.set-upload-flag.outputs.upload_enabled == 'true'
-        uses: aws-actions/configure-aws-credentials@v2
+      - name: Run KICS Scan
+        uses: checkmarx/kics-github-action@v2.1.11
         with:
-          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          path: 'user1,user2'  # Replace with the actual user folders in your repo
+          output_path: kics-output
 
-      - name: Install KICS
+      - name: Display KICS Results (optional)
         run: |
-          KICS_VERSION=1.7.5
-          curl -L -o kics "https://github.com/Checkmarx/kics/releases/download/v${KICS_VERSION}/kics_${KICS_VERSION}_linux_x64"
-          chmod +x kics
-          sudo mv kics /usr/local/bin/kics
-          kics version
-
-
-      - name: Run KICS on Terraform (user folders only)
-        run: |
-          mkdir -p kics-output
-          for dir in user*/; do
-            echo "Scanning $dir ..."
-            kics scan -p "$dir" \
-              -o kics-output \
-              --output-name "kics-results-${dir%/}" \
-              --report-formats json,html 
-          done
+          echo "KICS JSON Output:"
+          cat kics-output/results.json || echo "No results found"
 
       - name: Upload KICS Results as Artifact
         uses: actions/upload-artifact@v4
@@ -66,7 +49,11 @@ jobs:
       - name: Upload KICS Results to S3 (optional)
         if: steps.set-upload-flag.outputs.upload_enabled == 'true'
         run: |
-          for file in kics-output/*; do
-            echo "Uploading $file to S3..."
-            aws s3 cp "$file" s3://$KICS_S3_BUCKET/kics-results/
-          done
+          if ls kics-output/* 1> /dev/null 2>&1; then
+            for file in kics-output/*; do
+              echo "Uploading $file to S3..."
+              aws s3 cp "$file" s3://$KICS_S3_BUCKET/kics-results/
+            done
+          else
+            echo "No KICS results to upload"
+          fi
