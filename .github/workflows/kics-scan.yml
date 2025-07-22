@@ -20,8 +20,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials (optional for S3 upload)
+        if: ${{ secrets.ACCESS_KEY != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
         uses: aws-actions/configure-aws-credentials@v2
-        if: ${{ env.ACCESS_KEY != '' && env.AWS_SECRET_ACCESS_KEY != '' }}
         with:
           aws-access-key-id: ${{ secrets.ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -36,15 +36,23 @@ jobs:
       - name: Run KICS on Terraform
         run: |
           mkdir -p kics-output
-          kics scan -p . -o kics-output --output-name kics-results --report-formats json,html || true
+          kics scan -p . \
+            -o kics-output \
+            --output-name kics-results \
+            --report-formats json,html || true
+
+      - name: List KICS output
+        run: ls -la kics-output || echo "No output files found"
 
       - name: Upload KICS Results as Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: kics-results
           path: kics-output/
 
       - name: Upload KICS Results to S3 (optional)
+        if: ${{ secrets.ACCESS_KEY != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
         run: |
           if [[ -f kics-output/kics-results.json && -f kics-output/kics-results.html ]]; then
             echo "Uploading KICS results to S3..."
@@ -52,6 +60,4 @@ jobs:
             aws s3 cp kics-output/kics-results.html s3://your-kics-bucket/kics-results/kics-results.html
           else
             echo "KICS result files not found. Skipping S3 upload."
-            ls -la kics-output || echo "No output directory found."
           fi
-
