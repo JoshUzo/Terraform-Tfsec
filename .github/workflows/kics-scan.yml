@@ -29,11 +29,19 @@ jobs:
             echo "upload_enabled=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Configure AWS Credentials (for S3 upload)
+        if: steps.set-upload-flag.outputs.upload_enabled == 'true'
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Run KICS Scan
         continue-on-error: true
         uses: checkmarx/kics-github-action@v2.1.11
         with:
-          path: 'user1,user2'  # Replace with the actual user folders in your repo
+          path: 'user1,user2'  # Replace with actual user folders
           output_path: kics-output
 
       - name: Display KICS Results (optional)
