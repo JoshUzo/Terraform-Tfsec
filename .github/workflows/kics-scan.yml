@@ -1,0 +1,51 @@
+name: KICS Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.tf'
+
+jobs:
+  kics-scan:
+    name: Run KICS Scanner
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-2
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up AWS Credentials (optional for S3 upload)
+        if: secrets.ACCESS_KEY != '' && secrets.AWS_SECRET_ACCESS_KEY != ''
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install KICS
+        run: |
+          curl -Lo kics https://github.com/Checkmarx/kics/releases/latest/download/kics-linux
+          chmod +x kics
+          sudo mv kics /usr/local/bin/
+
+      - name: Run KICS on Terraform
+        run: |
+          mkdir -p kics-output
+          kics scan -p . -o kics-output --output-name kics-results --report-formats json,html || true
+
+      - name: Upload KICS Results as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kics-results
+          path: kics-output/
+
+      - name: Upload KICS Results to S3 (optional)
+        if: ${{ secrets.ACCESS_KEY != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
+        run: |
+          aws s3 cp kics-output/kics-results.json s3://your-kics-bucket/kics-results/kics-results.json
+          aws s3 cp kics-output/kics-results.html s3://your-kics-bucket/kics-results/kics-results.html
