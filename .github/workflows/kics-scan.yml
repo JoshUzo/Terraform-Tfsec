@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '**/*.tf'
+      - 'user*/**/*.tf'
 
 jobs:
   kics-scan:
@@ -19,43 +19,41 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install KICS
-        run: |
-          curl -Lo kics https://github.com/Checkmarx/kics/releases/latest/download/kics-linux
-          chmod +x kics
-          sudo mv kics /usr/local/bin/
-
-      - name: Run KICS on Terraform
-        run: |
-          mkdir -p kics-output
-          kics scan -p . \
-            -o kics-output \
-            --output-name kics-results \
-            --report-formats json,html || true
-
-      - name: List KICS output
-        run: ls -la kics-output || echo "No output files found"
-
-      - name: Upload KICS Results as Artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kics-results
-          path: kics-output/
-
       - name: Configure AWS credentials (optional for S3 upload)
+        if: ${{ secrets.ACCESS_KEY && secrets.AWS_SECRET_ACCESS_KEY }}
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Upload KICS Results to S3 (optional)
+      - name: Install KICS
         run: |
-          if [[ -f kics-output/kics-results.json && -f kics-output/kics-results.html ]]; then
-            echo "Uploading KICS results to S3..."
-            aws s3 cp kics-output/kics-results.json s3://your-kics-bucket/kics-results/kics-results.json
-            aws s3 cp kics-output/kics-results.html s3://your-kics-bucket/kics-results/kics-results.html
-          else
-            echo "KICS result files not found. Skipping S3 upload."
-          fi
+          curl -Lo kics https://github.com/Checkmarx/kics/releases/latest/download/kics-linux
+          chmod +x kics
+          sudo mv kics /usr/local/bin/
+
+      - name: Run KICS on Terraform (user folders only)
+        run: |
+          mkdir -p kics-output
+          for dir in user*/; do
+            echo "Scanning $dir ..."
+            kics scan -p "$dir" \
+              -o kics-output \
+              --output-name "kics-results-${dir%/}" \
+              --report-formats json,html || true
+          done
+
+      - name: Upload KICS Results as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kics-results
+          path: kics-output/
+
+      - name: Upload KICS Results to S3 (optional)
+        if: ${{ secrets.ACCESS_KEY && secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          for file in kics-output/*; do
+            echo "Uploading $file to S3..."
+            aws s3 cp "$file" s3://your-kics-bucket/kics-results/
+          done
