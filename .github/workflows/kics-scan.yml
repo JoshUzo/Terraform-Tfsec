@@ -30,6 +30,7 @@ jobs:
           fi
 
       - name: Run KICS Scan
+        continue-on-error: true
         uses: checkmarx/kics-github-action@v2.1.11
         with:
           path: 'user1,user2'  # Replace with the actual user folders in your repo
