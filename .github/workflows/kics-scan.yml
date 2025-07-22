@@ -39,9 +39,14 @@ jobs:
 
       - name: Install KICS
         run: |
-          curl -Lo kics https://github.com/Checkmarx/kics/releases/latest/download/kics-linux
+          LATEST_TAG=$(curl -s https://api.github.com/repos/Checkmarx/kics/releases/latest | grep tag_name | cut -d '"' -f 4)
+          echo "Latest KICS release: $LATEST_TAG"
+
+          curl -L -o kics "https://github.com/Checkmarx/kics/releases/download/${LATEST_TAG}/kics-linux"
           chmod +x kics
-          sudo mv kics /usr/local/bin/
+          sudo mv kics /usr/local/bin/kics
+          kics version
+
 
       - name: Run KICS on Terraform (user folders only)
         run: |
