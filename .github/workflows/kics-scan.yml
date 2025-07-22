@@ -14,14 +14,23 @@ jobs:
 
     env:
       AWS_REGION: us-east-2
-      KICS_S3_BUCKET: kics-log-bucket  # <-- Replace with your actual S3 bucket name
+      KICS_S3_BUCKET: kics-log-bucket  # replace with your actual bucket name
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set Upload Flag
+        id: set-upload-flag
+        run: |
+          if [ -n "${{ secrets.ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "upload_enabled=true" >> $GITHUB_OUTPUT
+          else
+            echo "upload_enabled=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Configure AWS credentials (optional for S3 upload)
-        if: ${{ secrets.ACCESS_KEY != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
+        if: steps.set-upload-flag.outputs.upload_enabled == 'true'
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.ACCESS_KEY }}
@@ -52,7 +61,7 @@ jobs:
           path: kics-output/
 
       - name: Upload KICS Results to S3 (optional)
-        if: ${{ secrets.ACCESS_KEY != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
+        if: steps.set-upload-flag.outputs.upload_enabled == 'true'
         run: |
           for file in kics-output/*; do
             echo "Uploading $file to S3..."
