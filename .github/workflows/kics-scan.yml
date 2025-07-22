@@ -40,8 +40,7 @@ jobs:
       - name: Install KICS
         run: |
           KICS_VERSION=2.1.11
-          curl -L -o kics.tar.gz "https://github.com/Checkmarx/kics/releases/download/v${KICS_VERSION}/kics_${KICS_VERSION}_linux_x64.tar.gz"
-          tar -xzf kics.tar.gz
+          curl -L -o kics "https://github.com/Checkmarx/kics/releases/download/v${KICS_VERSION}/kics_${KICS_VERSION}_linux_x64"
           chmod +x kics
           sudo mv kics /usr/local/bin/kics
           kics version
