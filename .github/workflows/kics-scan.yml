@@ -46,9 +46,12 @@ jobs:
 
       - name: Upload KICS Results to S3 (optional)
         run: |
-          if [[ -n "${{ secrets.ACCESS_KEY }}" && -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]]; then
+          if [[ -f kics-output/kics-results.json && -f kics-output/kics-results.html ]]; then
+            echo "Uploading KICS results to S3..."
             aws s3 cp kics-output/kics-results.json s3://your-kics-bucket/kics-results/kics-results.json
             aws s3 cp kics-output/kics-results.html s3://your-kics-bucket/kics-results/kics-results.html
           else
-            echo "Skipping S3 upload — AWS credentials not set."
+            echo "KICS result files not found. Skipping S3 upload."
+            ls -la kics-output || echo "No output directory found."
           fi
+
