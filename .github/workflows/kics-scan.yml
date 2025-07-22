@@ -51,7 +51,7 @@ jobs:
             kics scan -p "$dir" \
               -o kics-output \
               --output-name "kics-results-${dir%/}" \
-              --report-formats json,html || true
+              --report-formats json,html 
           done
 
       - name: Upload KICS Results as Artifact
