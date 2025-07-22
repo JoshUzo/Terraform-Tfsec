@@ -42,10 +42,12 @@ jobs:
           LATEST_TAG=$(curl -s https://api.github.com/repos/Checkmarx/kics/releases/latest | grep tag_name | cut -d '"' -f 4)
           echo "Latest KICS release: $LATEST_TAG"
 
-          curl -L -o kics "https://github.com/Checkmarx/kics/releases/download/${LATEST_TAG}/kics-linux"
+          curl -L -o kics.tar.gz "https://github.com/Checkmarx/kics/releases/download/${LATEST_TAG}/kics_${LATEST_TAG#v}_linux_x64.tar.gz"
+          tar -xzf kics.tar.gz
           chmod +x kics
           sudo mv kics /usr/local/bin/kics
           kics version
+
 
 
       - name: Run KICS on Terraform (user folders only)
