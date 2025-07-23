@@ -11,6 +11,10 @@ module "lambda_functions" {
   environment_variables  = each.value.environment_variables
   source_code_hash       = filebase64sha256(each.value.filename)
 
+  create_layer = try(each.value.create_layer, false)
+  layer_zip    = try(each.value.layer_zip, "")
+  layers       = try(each.value.layers, [])
+
   organization  = var.organization
   team          = var.team
   env           = var.env

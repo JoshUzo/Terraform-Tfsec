@@ -23,5 +23,16 @@ variable "lambda_functions" {
     filename              = string
     role_arn              = string
     environment_variables = map(string)
+    create_layer          = optional(bool)
+    layer_zip             = optional(string)
+    layers                = optional(list(string))
+    s3_event = optional(object({
+      bucket         = string
+      events         = list(string)
+      filter_prefix  = optional(string)
+      filter_suffix  = optional(string)
+    }))
   }))
 }
+
+

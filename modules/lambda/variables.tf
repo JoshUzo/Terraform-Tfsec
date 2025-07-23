@@ -77,3 +77,36 @@ variable "environment_variables" {
   type        = map(string)
   default     = {}
 }
+
+# Optional S3 trigger
+variable "s3_event" {
+  description = "Enable S3 event trigger"
+  type        = object({
+    bucket        = string
+    events        = list(string)
+    filter_prefix = optional(string)
+    filter_suffix = optional(string)
+  })
+  default     = null
+}
+
+variable "create_layer" {
+  description = "Whether to create a Lambda Layer"
+  type        = bool
+  default     = false
+}
+
+variable "layer_zip" {
+  description = "Path to the layer zip file"
+  type        = string
+  default     = ""
+}
+
+variable "layers" {
+  description = "Optional list of layer ARNs to attach"
+  type        = list(string)
+  default     = []
+}
+
+
+
