@@ -1,0 +1,68 @@
+name: KICS Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'user*/**/*.tf'
+
+jobs:
+  kics-scan:
+    name: Run KICS Scanner
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-2
+      KICS_S3_BUCKET: kics-log-bucket
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Upload Flag
+        id: set-upload-flag
+        run: |
+          if [ -n "${{ secrets.ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "upload_enabled=true" >> $GITHUB_OUTPUT
+          else
+            echo "upload_enabled=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure AWS Credentials (for S3 upload)
+        if: steps.set-upload-flag.outputs.upload_enabled == 'true'
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run KICS Scan
+        continue-on-error: true
+        uses: checkmarx/kics-github-action@v2.1.11
+        with:
+          path: 'user1,user2'  # Replace with actual user folders
+          output_path: kics-output
+
+      - name: Display KICS Results (optional)
+        run: |
+          echo "KICS JSON Output:"
+          cat kics-output/results.json || echo "No results found"
+
+      - name: Upload KICS Results as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kics-results
+          path: kics-output/
+
+      - name: Upload KICS Results to S3 (optional)
+        if: steps.set-upload-flag.outputs.upload_enabled == 'true'
+        run: |
+          if ls kics-output/* 1> /dev/null 2>&1; then
+            for file in kics-output/*; do
+              echo "Uploading $file to S3..."
+              aws s3 cp "$file" s3://$KICS_S3_BUCKET/kics-results/
+            done
+          else
+            echo "No KICS results to upload"
+          fi
