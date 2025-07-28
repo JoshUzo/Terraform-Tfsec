@@ -24,13 +24,16 @@ jobs:
           echo "folders=$folders" >> $GITHUB_OUTPUT
 
   run-ci:
-    name: Run Terraform + tfsec per Folder
+    name: Run Terraform CI/CD
     needs: detect-folders
     runs-on: ubuntu-latest
     if: needs.detect-folders.outputs.folders != '[]'
     strategy:
       matrix:
         folder: ${{ fromJson(needs.detect-folders.outputs.folders) }}
+    environment:
+      name: dev-apply
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,41 +46,32 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
+          aws-region: us-east-2 # Make this env variable
 
-      - name: Zip Lambda Code if applicable
-        run: |
-          cd ${{ matrix.folder }}
-          mkdir -p build
-          zip -r build/test_lambda.zip . -x "*.tf" -x "*.tfvars" -x "build/*" -x ".terraform/*" || echo "No files to zip"
+      # Static Code Scanning (Before Apply)
 
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ${{ matrix.folder }}
+      - name: Run KICS Scan
+        uses: checkmarx/kics-github-action@v2.1.11
+        with:
+          path: '${{ matrix.folder }}'
+          output_path: ${{ matrix.folder }}/kics-output
+        continue-on-error: true  # Let pipeline continue even if KICS finds issues
 
-      - name: Terraform Validate
-        run: terraform validate
-        working-directory: ${{ matrix.folder }}
-
-      - name: Terraform Plan
-        run: terraform plan -var-file="vars/dev.tfvars"
-        working-directory: ${{ matrix.folder }}
-
-      - name: Install tfsec
-        run: |
-          curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64 -o tfsec
-          chmod +x tfsec
-          sudo mv tfsec /usr/local/bin/
-
-      - name: Run tfsec
-        run: tfsec --format json --out tfsec-results.json || true
-        working-directory: ${{ matrix.folder }}
-
-      - name: Upload tfsec results
+      - name: Upload KICS Results
         uses: actions/upload-artifact@v4
         with:
-          name: tfsec-results-${{ matrix.folder }}
-          path: ${{ matrix.folder }}/tfsec-results.json
+          name: kics-results-${{ matrix.folder }}
+          path: ${{ matrix.folder }}/kics-output
+
+      # Uncomment this block to enforce security gates before apply
+      # - name: Fail on critical/high KICS issues
+      #   run: |
+      #     count=$(jq '[.queries[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' ${{ matrix.folder }}/kics-output/results.json)
+      #     echo "High/Critical findings: $count"
+      #     if [ "$count" -gt 0 ]; then
+      #       echo "🚨 High/Critical KICS findings — failing CI"
+      #       exit 1
+      #     fi
 
 
       - name: Install SonarScanner
@@ -97,7 +91,6 @@ jobs:
             -Dsonar.host.url=http://18.191.129.160:9000 \
             -Dsonar.login=$SONAR_TOKEN \
             | tee sonarqube-output.log || true
-        
 
       - name: Fetch SonarQube Issues
         env:
@@ -115,3 +108,30 @@ jobs:
           else
             echo "Issues file not found, skipping upload."
           fi
+
+      # Terraform Execution (After Approval)
+
+      - name: Zip Lambda Code if applicable
+        run: |
+          cd ${{ matrix.folder }}
+          mkdir -p build
+          zip -r build/test_lambda.zip . -x "*.tf" -x "*.tfvars" -x "build/*" -x ".terraform/*" || echo "No files to zip"
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ matrix.folder }}
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ matrix.folder }}
+
+      - name: Terraform Plan
+        run: terraform plan -var-file="vars/dev.tfvars"
+        working-directory: ${{ matrix.folder }}
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -var-file="vars/dev.tfvars"
+        working-directory: ${{ matrix.folder }}
+        
+
+      
