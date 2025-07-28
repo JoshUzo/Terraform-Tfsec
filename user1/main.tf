@@ -2,12 +2,12 @@
 
 locals {
   s3_buckets = {
-    hello = {
-      purpose = "hello"
+    green = {
+      purpose = "green"
       }
     }
-    processed = {
-      purpose = "processed"
+    blue = {
+      purpose = "blue"
     }
     logs = {
       purpose = "logs"
