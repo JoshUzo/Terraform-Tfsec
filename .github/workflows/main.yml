@@ -31,9 +31,8 @@ jobs:
     strategy:
       matrix:
         folder: ${{ fromJson(needs.detect-folders.outputs.folders) }}
-    environment:
-      name: dev-apply
-      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    outputs:
+      folder: ${{ matrix.folder }}
 
     steps:
       - uses: actions/checkout@v4
@@ -127,6 +126,33 @@ jobs:
 
       - name: Terraform Plan
         run: terraform plan -var-file="vars/dev.tfvars"
+        working-directory: ${{ matrix.folder }}
+
+  terraform-apply:
+    name: Terraform Apply
+    needs: run-ci
+    runs-on: ubuntu-latest
+    environment:
+      name: dev-apply  #This triggers manual approval
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    strategy:
+      matrix:
+        folder: ${{ fromJson(needs.detect-folders.outputs.folders) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Terraform Init
+        run: terraform init
         working-directory: ${{ matrix.folder }}
 
       - name: Terraform Apply
