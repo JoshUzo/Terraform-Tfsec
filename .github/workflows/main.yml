@@ -130,7 +130,7 @@ jobs:
 
   terraform-apply:
     name: Terraform Apply
-    needs: run-ci
+    needs: detect-folders
     runs-on: ubuntu-latest
     environment:
       name: dev-apply  #This triggers manual approval
