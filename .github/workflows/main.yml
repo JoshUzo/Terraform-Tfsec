@@ -7,6 +7,9 @@ on:
       - 'user*/**'  # Triggers if any user folder changes
   workflow_dispatch:  # Manual trigger
 
+env:
+      AWS_REGION: us-east-2
+      KICS_S3_BUCKET: kics-log-bucket
 jobs:
   detect-folders:
     runs-on: ubuntu-latest
@@ -33,10 +36,6 @@ jobs:
         folder: ${{ fromJson(needs.detect-folders.outputs.folders) }}
     outputs:
       folder: ${{ matrix.folder }}
-      
-    env:
-      AWS_REGION: us-east-2
-      KICS_S3_BUCKET: kics-log-bucket
       
     steps:
       - uses: actions/checkout@v4
