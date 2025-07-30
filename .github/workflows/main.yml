@@ -48,7 +48,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: $AWS_REGION # Make this env variable
+          aws-region: ${{ env.AWS_REGION }}  # Make this env variable
 
       # Static Code Scanning (Before Apply)
 
