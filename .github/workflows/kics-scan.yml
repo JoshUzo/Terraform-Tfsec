@@ -2,10 +2,6 @@ name: KICS Scan
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'user*/**/*.tf'
 
 jobs:
   kics-scan:

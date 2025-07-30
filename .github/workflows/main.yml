@@ -33,7 +33,11 @@ jobs:
         folder: ${{ fromJson(needs.detect-folders.outputs.folders) }}
     outputs:
       folder: ${{ matrix.folder }}
-
+      
+    env:
+      AWS_REGION: us-east-2
+      KICS_S3_BUCKET: kics-log-bucket
+      
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +49,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2 # Make this env variable
+          aws-region: $AWS_REGION # Make this env variable
 
       # Static Code Scanning (Before Apply)
 
@@ -61,6 +65,21 @@ jobs:
         with:
           name: kics-results-${{ matrix.folder }}
           path: ${{ matrix.folder }}/kics-output
+
+      - name: Upload KICS Results to S3
+        run: |
+          if ls ${{ matrix.folder }}/kics-output/* 1> /dev/null 2>&1; then
+            timestamp=$(date +%Y%m%d-%H%M%S)
+            for file in ${{ matrix.folder }}/kics-output/*; do
+              filename=$(basename "$file")
+              echo "Uploading $filename for ${{ matrix.folder }} to S3..."
+              aws s3 cp "$file" \
+                "s3://$KICS_S3_BUCKET/kics-results/${{ matrix.folder }}/$timestamp/$filename"
+            done
+          else
+            echo "No KICS results found to upload."
+          fi
+
 
       # Uncomment this block to enforce security gates before apply
       # - name: Fail on critical/high KICS issues
