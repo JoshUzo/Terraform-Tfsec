@@ -1,10 +1,9 @@
-#this is mainv21
+#this is mainv22
 
 locals {
   s3_buckets = {
     brown = {
       purpose = "brown"
-      }
     }
     blue = {
       purpose = "blue"
@@ -15,7 +14,8 @@ locals {
     data = {
       purpose = "data"
     }
-  }
+   }
+ }
 
 
 module "s3_raw_data" {
