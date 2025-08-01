@@ -10,7 +10,7 @@ on:
 env:
       AWS_REGION: us-east-2
       KICS_S3_BUCKET: kics-log-bucket
-      SQ_S3_BUCKET: sq-log-buckeT
+      SQ_S3_BUCKET: sq-log-bucket
       PROJECT_NAME: htown-sp-sonarqube
       
 jobs:
@@ -92,7 +92,7 @@ jobs:
       #     count=$(jq '[.queries[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' ${{ matrix.folder }}/kics-output/results.json)
       #     echo "High/Critical findings: $count"
       #     if [ "$count" -gt 0 ]; then
-      #       echo "🚨 High/Critical KICS findings — failing CI"
+      #       echo "High/Critical KICS findings — failing CI"
       #       exit 1
       #     fi
 
