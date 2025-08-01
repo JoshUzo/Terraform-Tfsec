@@ -108,10 +108,11 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
+          cd ${{ matrix.folder }}
           sonar-scanner \
             -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
             -Dsonar.projectName=htown-sp-sonarqube-${{ matrix.folder }} \
-            -Dsonar.sources=${{ matrix.folder }} \
+            -Dsonar.sources=. \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.login=$SONAR_TOKEN \
             -Dsonar.python.version=3 \
