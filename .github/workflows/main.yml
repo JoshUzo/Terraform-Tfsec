@@ -109,7 +109,8 @@ jobs:
             -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
             -Dsonar.sources=${{ matrix.folder }} \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.login=$SONAR_TOKEN \
+            -Dsonar.token=$SONAR_TOKEN \
+            -Dsonar.python.version=3
             | tee sonarqube-output.log || true
 
       - name: Check SonarQube Quality Gate Status
