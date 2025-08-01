@@ -122,28 +122,40 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           echo "Checking SonarQube Quality Gate status for $PROJECT_NAME-${{ matrix.folder }}..."
-          
-          analysisId=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/ce/component?component=$PROJECT_NAME-${{ matrix.folder }}" | jq -r '.queue[0].id')
-          
-          for i in {1..10}; do
-            status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/ce/task?id=$analysisId" | jq -r '.task.status')
-            echo "Analysis status: $status"
-            if [[ "$status" == "SUCCESS" ]]; then
-              break
-            fi
-            echo "Waiting for analysis to complete..."
-            sleep 5
-          done
 
-          quality_status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$analysisId" | jq -r '.projectStatus.status')
-          echo "Quality Gate Status: $quality_status"
+          # Get latest analysisId from project analysis history
+          analysisId=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/project_analyses/search?project=$PROJECT_NAME-${{ matrix.folder }}" \
+            | jq -r '.analyses[0].events[] | select(.category=="QUALITY_GATE") | .analysisId')
 
-          if [[ "$quality_status" != "OK" ]]; then
-            echo "Quality Gate FAILED for project $PROJECT_NAME-${{ matrix.folder }}"
-            exit 1
+          if [ -z "$analysisId" ]; then
+            echo "Failed to retrieve analysisId. No recent analysis event found."
+           exit 1
           fi
 
-          echo "Quality Gate PASSED for project $PROJECT_NAME-${{ matrix.folder }}"
+            echo "Found analysisId: $analysisId"
+
+          # Wait for Quality Gate status to be available
+          for i in {1..10}; do
+          quality_status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$analysisId" \
+            | jq -r '.projectStatus.status')
+ 
+          echo "Quality Gate Status: $quality_status"
+
+          if [[ "$quality_status" == "OK" || "$quality_status" == "ERROR" || "$quality_status" == "WARN" ]]; then
+           break
+          fi
+
+          echo " Waiting for quality gate result..."
+          sleep 5
+          done
+
+          if [[ "$quality_status" != "OK" ]]; then
+          echo "Quality Gate FAILED for project $PROJECT_NAME-${{ matrix.folder }}"
+          exit 1
+          fi
+
+          echo " Quality Gate PASSED for project $PROJECT_NAME-${{ matrix.folder }}"
+
 
           
 
