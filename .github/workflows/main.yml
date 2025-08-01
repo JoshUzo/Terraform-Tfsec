@@ -110,11 +110,16 @@ jobs:
         run: |
           sonar-scanner \
             -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
+            -Dsonar.projectName=htown-sp-sonarqube-${{ matrix.folder }} \
             -Dsonar.sources=${{ matrix.folder }} \
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.token=$SONAR_TOKEN \
-            -Dsonar.python.version=3 | tee sonarqube-output.log 
-          
+            -Dsonar.host.url=http://${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=$SONAR_TOKEN \
+            -Dsonar.python.version=3 \
+            -Dsonar.projectVersion=1.0.${{ github.run_number }} \
+            -Dsonar.scm.disabled=false \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.sourceEncoding=UTF-8 \
+            | tee sonarqube-output.log
 
       - name: Fetch SonarQube Issues
         env:
