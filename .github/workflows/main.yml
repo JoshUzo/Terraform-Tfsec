@@ -113,7 +113,7 @@ jobs:
             -Dsonar.sources=${{ matrix.folder }} \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.token=$SONAR_TOKEN \
-            -Dsonar.python.version=3 | tee sonarqube-output.log || true
+            -Dsonar.python.version=3 | tee sonarqube-output.log 
 
 
       - name: Check SonarQube Quality Gate Status
