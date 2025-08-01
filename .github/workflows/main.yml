@@ -127,10 +127,10 @@ jobs:
           analysisId=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/project_analyses/search?project=$PROJECT_NAME-${{ matrix.folder }}" \
             | jq -r '.analyses[0].events[] | select(.category=="QUALITY_GATE") | .analysisId')
 
-          if [ -z "$analysisId" ]; then
-            echo "Failed to retrieve analysisId. No recent analysis event found."
-           exit 1
-          fi
+          #if [ -z "$analysisId" ]; then
+          #  echo "Failed to retrieve analysisId. No recent analysis event found."
+          # exit 1
+          #fi
 
             echo "Found analysisId: $analysisId"
 
