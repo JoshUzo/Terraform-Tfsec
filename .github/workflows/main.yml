@@ -135,7 +135,7 @@ jobs:
             echo "Found analysisId: $analysisId"
 
           # Wait for Quality Gate status to be available
-          for i in {1..10}; do
+          for i in {1..1000}; do
           quality_status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$analysisId" \
             | jq -r '.projectStatus.status')
  
