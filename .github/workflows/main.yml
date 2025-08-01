@@ -108,7 +108,7 @@ jobs:
           sonar-scanner \
             -Dsonar.projectKey=htown-sp-sonarqube-${{ matrix.folder }} \
             -Dsonar.sources=${{ matrix.folder }} \
-            -Dsonar.host.url=http://${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.login=$SONAR_TOKEN \
             | tee sonarqube-output.log || true
 
