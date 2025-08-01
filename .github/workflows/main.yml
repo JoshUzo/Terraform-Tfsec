@@ -115,6 +115,7 @@ jobs:
             -Dsonar.token=$SONAR_TOKEN \
             -Dsonar.python.version=3 | tee sonarqube-output.log || true
 
+
       - name: Check SonarQube Quality Gate Status
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -143,6 +144,8 @@ jobs:
           fi
 
           echo "Quality Gate PASSED for project $PROJECT_NAME-${{ matrix.folder }}"
+
+          
 
       - name: Fetch SonarQube Issues
         env:
