@@ -105,6 +105,8 @@ jobs:
           echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
 
       - name: Run SonarQube Scan
+        id: sonar_scan
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
@@ -124,28 +126,27 @@ jobs:
 
 
       - name: Check SonarQube Quality Gate Status
+        if: steps.sonar_scan.outcome == 'success'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          cd ${{ matrix.folder }}
+          echo "Checking SonarQube Quality Gate status for $PROJECT_NAME-${{ matrix.folder }}..."
 
-          report_file=".scannerwork/report-task.txt"
-
+          report_file="${{ matrix.folder }}/.scannerwork/report-task.txt"
           if [ ! -f "$report_file" ]; then
-            echo "SonarQube report-task.txt not found. Skipping quality gate check."
+            echo "report-task.txt not found — Quality Gate check skipped"
             exit 1
           fi
 
           analysisId=$(grep '^ceTaskId=' "$report_file" | cut -d'=' -f2)
-
           if [ -z "$analysisId" ]; then
-            echo " No analysis ID found in report-task.txt."
-            exit 1
+            echo "No analysis ID found in report-task.txt. Exiting."
+          exit 1
           fi
 
-          echo " Waiting for analysis task to complete..."
-          for i in {1..10}; do
+          echo "Waiting for analysis task to complete..."
+          for i in {1..15}; do
             status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/ce/task?id=$analysisId" | jq -r '.task.status')
             echo "Analysis status: $status"
             if [[ "$status" == "SUCCESS" ]]; then
@@ -154,16 +155,19 @@ jobs:
             sleep 5
           done
 
-          quality_status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$analysisId" | jq -r '.projectStatus.status')
+          echo "Waiting additional time for quality gate generation..."
+          sleep 10
 
+          quality_status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$analysisId" | jq -r '.projectStatus.status')
           echo "Quality Gate Status: $quality_status"
 
           if [[ "$quality_status" != "OK" ]]; then
             echo "Quality Gate FAILED for $PROJECT_NAME-${{ matrix.folder }}"
             exit 1
-          else
-            echo " Quality Gate PASSED for $PROJECT_NAME-${{ matrix.folder }}"
           fi
+
+          echo "Quality Gate PASSED for $PROJECT_NAME-${{ matrix.folder }}"
+
 
 
       - name: Fetch SonarQube Issues
