@@ -127,6 +127,7 @@ jobs:
 
       - name: Fail if SonarQube Quality Gate Failed
         run: |
+          cd ${{ matrix.folder }}
           if grep -q "QUALITY GATE STATUS: FAILED" sonarqube-output.log; then
             echo "SonarQube Quality Gate FAILED"
             exit 1
