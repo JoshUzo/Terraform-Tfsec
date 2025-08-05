@@ -45,11 +45,6 @@ variable "runtime" {
   type        = string
 }
 
-variable "source_code_hash" {
-  description = "Base64-encoded SHA256 hash of the deployment package"
-  type        = string
-}
-
 variable "role_arn" {
   description = "ARN of the IAM role assumed by Lambda"
   type        = string
