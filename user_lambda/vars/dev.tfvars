@@ -18,7 +18,7 @@ lambda_functions = {
 
     # S3-based deployment (CI/CD uploads this ZIP)
     s3_key            = "lambdas/cleaner.zip"
-    source_code_hash  = "base64-string-generated-by-openssl"
+    source_code_hash  = "REPLACE BY CICD"
 
 
     # Optional Layer 
@@ -40,7 +40,7 @@ lambda_functions = {
     }
 
     s3_key            = "lambdas/digest_index.zip"
-    source_code_hash  = "base64-string-generated-by-openssl"
+    source_code_hash  = "REPLACED BY CICD"
 
     create_layer      = true
     layer_s3_key      = "layers/digest_index.zip"
