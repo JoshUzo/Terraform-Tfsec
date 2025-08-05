@@ -9,7 +9,7 @@ def handler(event, context):
     if "run" in event:
         result = eval(event["run"])  # dangerous usage
 
-    # DUPLICATE: repeated logic
+    # DUPLICATE: repeated logic in code
     if event.get("action") == "greet":
         return {
             "statusCode": 200,
