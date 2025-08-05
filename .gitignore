@@ -34,5 +34,6 @@ Thumbs.db
 node_modules/
 
 # Python cache (if using Python scripts)
+build/
 __pycache__/
 *.pyc

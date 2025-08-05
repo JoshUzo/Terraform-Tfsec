@@ -3,8 +3,12 @@ resource "aws_lambda_function" "this" {
   handler          = var.handler
   runtime          = var.runtime
   role             = var.role_arn
-  filename         = var.filename
-  source_code_hash = filebase64sha256(var.filename)
+  
+# Use S3-based source instead of local filename
+  s3_bucket         = var.lambda_s3_bucket
+  s3_key            = var.lambda_s3_key
+  source_code_hash  = var.source_code_hash
+
 
   layers = (
   var.create_layer ?
@@ -47,7 +51,8 @@ resource "aws_s3_bucket_notification" "lambda_trigger" {
 resource "aws_lambda_layer_version" "this" {
   count = var.create_layer ? 1 : 0
 
-  filename             = var.layer_zip
+  s3_bucket            = var.layer_s3_bucket
+  s3_key               = var.layer_s3_key
   layer_name           = "${var.organization}-${var.team}-layer-${var.purpose}-${var.env}"
   compatible_runtimes  = [var.runtime]
 }

@@ -45,11 +45,6 @@ variable "runtime" {
   type        = string
 }
 
-variable "filename" {
-  description = "Path to the zipped Lambda function code"
-  type        = string
-}
-
 variable "source_code_hash" {
   description = "Base64-encoded SHA256 hash of the deployment package"
   type        = string
@@ -96,12 +91,6 @@ variable "create_layer" {
   default     = false
 }
 
-variable "layer_zip" {
-  description = "Path to the layer zip file"
-  type        = string
-  default     = ""
-}
-
 variable "layers" {
   description = "Optional list of layer ARNs to attach"
   type        = list(string)
@@ -109,4 +98,31 @@ variable "layers" {
 }
 
 
+variable "lambda_s3_bucket" {
+  description = "S3 bucket where Lambda zip is stored"
+  type        = string
+}
+
+variable "lambda_s3_key" {
+  description = "S3 key (path) to Lambda zip"
+  type        = string
+}
+
+variable "source_code_hash" {
+  description = "Base64-encoded SHA256 hash of the Lambda zip file"
+  type        = string
+  default     = null
+}
+
+variable "layer_s3_bucket" {
+  description = "S3 bucket where Lambda layer zip is stored"
+  type        = string
+  default     = null
+}
+
+variable "layer_s3_key" {
+  description = "S3 key (path) to Lambda layer zip"
+  type        = string
+  default     = null
+}
 
