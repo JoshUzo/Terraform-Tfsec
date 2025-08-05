@@ -159,12 +159,42 @@ jobs:
 
       # Terraform Execution (After Approval)
 
-      - name: Zip Lambda Code if applicable
+      - name: Zip Lambda Code and Layer
         run: |
           cd ${{ matrix.folder }}
           mkdir -p build
-          zip -r build/test_lambda.zip . -x "*.tf" -x "*.tfvars" -x "build/*" -x ".terraform/*" || echo "No files to zip"
+          if [ -d lambdas ]; then
+            for dir in lambdas/*; do
+              name=$(basename "$dir")
+              zip -r "build/${name}.zip" "$dir"
+            done
+          fi
+          if [ -d layers ]; then
+            for dir in layers/*; do
+              name=$(basename "$dir")
+              zip -r "build/${name}_layer.zip" "$dir"
+            done
+          fi
 
+      - name: Upload Artifacts to S3 and Generate Hashes
+        run: |
+          cd ${{ matrix.folder }}
+          mkdir -p tfvars_out
+          echo '{ "lambda_functions": {' > tfvars_out/source_code.tfvars.json
+          first=1
+          for zip in build/*.zip; do
+            name=$(basename "$zip" .zip)
+            hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
+            aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
+            if [ $first -eq 1 ]; then
+              first=0
+            else
+              echo "," >> tfvars_out/source_code.tfvars.json
+            fi
+            echo "  \"$name\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
+          done
+          echo "} }" >> tfvars_out/source_code.tfvars.json
+          
       - name: Terraform Init
         run: terraform init
         working-directory: ${{ matrix.folder }}
@@ -174,7 +204,7 @@ jobs:
         working-directory: ${{ matrix.folder }}
 
       - name: Terraform Plan
-        run: terraform plan -var-file="vars/dev.tfvars"
+        run: terraform plan -var-file="vars/dev.tfvars" -var-file="tfvars_out/source_code.tfvars.json"
         working-directory: ${{ matrix.folder }}
 
   terraform-apply:
@@ -205,7 +235,7 @@ jobs:
         working-directory: ${{ matrix.folder }}
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -var-file="vars/dev.tfvars"
+        run: terraform apply -auto-approve -var-file="vars/dev.tfvars" -var-file="tfvars_out/source_code.tfvars.json"
         working-directory: ${{ matrix.folder }}
         
 
