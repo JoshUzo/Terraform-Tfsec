@@ -86,15 +86,15 @@ jobs:
           fi
 
 
-      # Uncomment this block to enforce security gates before apply
-      # - name: Fail on critical/high KICS issues
-      #   run: |
-      #     count=$(jq '[.queries[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' ${{ matrix.folder }}/kics-output/results.json)
-      #     echo "High/Critical findings: $count"
-      #     if [ "$count" -gt 0 ]; then
-      #       echo "High/Critical KICS findings — failing CI"
-      #       exit 1
-      #     fi
+       # Uncomment this block to enforce security gates before apply
+      - name: Fail on critical/high KICS issues
+        run: |
+           count=$(jq '[.queries[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' ${{ matrix.folder }}/kics-output/results.json)
+           echo "High/Critical findings: $count"
+           if [ "$count" -gt 0 ]; then
+             echo "High/Critical KICS findings — failing CI"
+             exit 1
+           fi
 
 
       - name: Install SonarScanner
@@ -121,50 +121,6 @@ jobs:
             -Dsonar.qualitygate.wait=true \
             -Dsonar.sourceEncoding=UTF-8 \
             | tee sonarqube-output.log
-
-
-      - name: Check SonarQube Quality Gate Status
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          echo "Checking SonarQube Quality Gate status for $PROJECT_NAME-${{ matrix.folder }}..."
-
-          # Fetch analysis task report file
-          report_file="${{ matrix.folder }}/.scannerwork/report-task.txt"
-    
-          if [ ! -f "$report_file" ]; then
-            echo " SonarQube report-task.txt not found. Quality Gate check skipped."
-            exit 1
-          fi
-
-          analysisId=$(grep '^ceTaskId=' "$report_file" | cut -d'=' -f2)
-
-          if [ -z "$analysisId" ]; then
-            echo " No analysis ID found in report-task.txt. Exiting."
-          exit 1
-          fi
-
-          echo " Waiting for analysis task to complete..."
-          for i in {1..10}; do
-            status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/ce/task?id=$analysisId" | jq -r '.task.status')
-            echo "Analysis status: $status"
-            if [[ "$status" == "SUCCESS" ]]; then
-              break
-            fi
-            sleep 5
-          done
-
-          quality_status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$analysisId" | jq -r '.projectStatus.status')
-
-          echo " Quality Gate Status: $quality_status"
-
-          if [[ "$quality_status" != "OK" ]]; then
-            echo " Quality Gate FAILED for $PROJECT_NAME-${{ matrix.folder }}"
-          exit 1
-          fi
-
-          echo " Quality Gate PASSED for $PROJECT_NAME-${{ matrix.folder }}"
 
 
       - name: Fetch SonarQube Issues
