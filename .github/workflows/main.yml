@@ -12,6 +12,7 @@ env:
       KICS_S3_BUCKET: kics-log-bucket
       SQ_S3_BUCKET: sq-log-bucket
       PROJECT_NAME: htown-sp-sonarqube
+      LAMBDA_ARTIFACT_BUCKET: htown-dev-lambda-artifacts
       
 jobs:
   detect-folders:
