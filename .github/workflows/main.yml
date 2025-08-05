@@ -123,6 +123,49 @@ jobs:
             | tee sonarqube-output.log
 
 
+      - name: Check SonarQube Quality Gate Status
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          cd ${{ matrix.folder }}
+
+          report_file=".scannerwork/report-task.txt"
+
+          if [ ! -f "$report_file" ]; then
+            echo "SonarQube report-task.txt not found. Skipping quality gate check."
+            exit 1
+          fi
+
+          analysisId=$(grep '^ceTaskId=' "$report_file" | cut -d'=' -f2)
+
+          if [ -z "$analysisId" ]; then
+            echo " No analysis ID found in report-task.txt."
+            exit 1
+          fi
+
+          echo " Waiting for analysis task to complete..."
+          for i in {1..10}; do
+            status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/ce/task?id=$analysisId" | jq -r '.task.status')
+            echo "Analysis status: $status"
+            if [[ "$status" == "SUCCESS" ]]; then
+              break
+            fi
+            sleep 5
+          done
+
+          quality_status=$(curl -s -u "$SONAR_TOKEN:" "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$analysisId" | jq -r '.projectStatus.status')
+
+          echo "Quality Gate Status: $quality_status"
+
+          if [[ "$quality_status" != "OK" ]]; then
+            echo "Quality Gate FAILED for $PROJECT_NAME-${{ matrix.folder }}"
+            exit 1
+          else
+            echo " Quality Gate PASSED for $PROJECT_NAME-${{ matrix.folder }}"
+          fi
+
+
       - name: Fetch SonarQube Issues
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
