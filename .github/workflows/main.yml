@@ -182,19 +182,34 @@ jobs:
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
           echo '{ "lambda_functions": {' > tfvars_out/source_code.tfvars.json
+
           first=1
+
           for zip in build/*.zip; do
             name=$(basename "$zip" .zip)
+
+            # Skip layer zip files (ending in _layer.zip)
+            if [[ "$name" == *_layer ]]; then
+              continue
+            fi
+
             hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
+
+            #  Upload to S3
             aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
+
+            #  Write only Lambda function hashes to tfvars_out
             if [ $first -eq 1 ]; then
               first=0
             else
               echo "," >> tfvars_out/source_code.tfvars.json
             fi
+
             echo "  \"$name\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
           done
+
           echo "} }" >> tfvars_out/source_code.tfvars.json
+
           
       - name: Terraform Init
         run: terraform init
