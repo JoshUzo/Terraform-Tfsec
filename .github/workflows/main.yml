@@ -148,10 +148,14 @@ jobs:
       - name: Upload SonarQube Issues to S3
         run: |
           if [ -f sonarqube-results.json ]; then
-            aws s3 cp sonarqube-results.json s3://$SQ_S3_BUCKET/sonarqube/${{ matrix.folder }}/sonarqube-results.json
+            timestamp=$(date +%Y%m%d-%H%M%S)
+            echo "Uploading SonarQube results for ${{ matrix.folder }} to S3..."
+            aws s3 cp sonarqube-results.json \
+              "s3://$SQ_S3_BUCKET/sonarqube/${{ matrix.folder }}/$timestamp/sonarqube-results.json"
           else
             echo "Issues file not found, skipping upload."
           fi
+
 
       # Terraform Execution (After Approval)
 
