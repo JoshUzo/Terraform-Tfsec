@@ -225,7 +225,7 @@ jobs:
 
   terraform-apply:
     name: Terraform Apply
-    needs: detect-folders
+    needs: run-ci
     runs-on: ubuntu-latest
     environment:
       name: dev-apply  #This triggers manual approval
@@ -244,7 +244,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
         run: terraform init
