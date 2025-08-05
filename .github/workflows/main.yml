@@ -124,20 +124,17 @@ jobs:
             -Dsonar.sourceEncoding=UTF-8 \
             | tee ../sonarqube-output.log
 
-      - name: Debug:Show where the log is       
-        run: find . -name sonarqube-output.log
-        
-      - name: Fail if SonarQube Quality Gate Failed
+      - name: Check SonarQube Quality Gate from log
         run: |
-          echo "Checking for QUALITY GATE STATUS: FAILED..."
-          cat sonarqube-output.log
-        
-          if grep -q "QUALITY GATE STATUS: FAILED" sonarqube-output.log; then
+          echo "Checking for QUALITY GATE STATUS failure or EXECUTION FAILURE..."
+    
+          if grep -q "QUALITY GATE STATUS: FAILED" sonarqube-output.log || grep -q "EXECUTION FAILURE" sonarqube-output.log; then
             echo "SonarQube Quality Gate FAILED"
             exit 1
           else
             echo "SonarQube Quality Gate PASSED"
           fi
+
 
       - name: Fetch SonarQube Issues
         env:
