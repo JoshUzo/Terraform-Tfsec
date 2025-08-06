@@ -164,8 +164,8 @@ jobs:
         run: |
           cd ${{ matrix.folder }}
           mkdir -p build
-          if [ -d lambdas ]; then
-            for dir in lambdas/*; do
+          if [ -d python ]; then
+            for dir in python/*; do
               name=$(basename "$dir")
               zip -r "build/${name}.zip" "$dir"
             done
