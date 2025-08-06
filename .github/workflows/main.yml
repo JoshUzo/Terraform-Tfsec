@@ -160,53 +160,62 @@ jobs:
 
       # Terraform Execution (After Approval)
 
-      - name: Zip Lambda Code and Layer
+      - name: Zip Lambda Code and Layer (if applicable)
         run: |
           cd ${{ matrix.folder }}
-          mkdir -p build
-          if [ -d python ]; then
-            for dir in python/*; do
+    
+          if [ -d python ] || [ -d layers ]; then
+            mkdir -p build
+          fi
+
+          if [ -d lambdas ]; then
+            for dir in lambdas/*; do
+              [ -d "$dir" ] || continue  # Skip non-directories
               name=$(basename "$dir")
               zip -r "build/${name}.zip" "$dir"
             done
           fi
+
           if [ -d layers ]; then
             for dir in layers/*; do
+              [ -d "$dir" ] || continue
               name=$(basename "$dir")
               zip -r "build/${name}_layer.zip" "$dir"
             done
           fi
 
-      - name: Upload Artifacts to S3 and Generate Hashes
+      - name: Upload Artifacts to S3 and Generate Hashes (if applicable)
         run: |
           cd ${{ matrix.folder }}
+    
           mkdir -p tfvars_out
           echo '{ "lambda_functions": {' > tfvars_out/source_code.tfvars.json
 
           first=1
 
-          for zip in build/*.zip; do
-            name=$(basename "$zip" .zip)
+          if compgen -G "build/*.zip" > /dev/null; then
+            for zip in build/*.zip; do
+              name=$(basename "$zip" .zip)
 
-            # Skip layer zip files (ending in _layer.zip)
-            if [[ "$name" == *_layer ]]; then
-              continue
-            fi
+              # Skip layer zip files (ending in _layer.zip)
+              if [[ "$name" == *_layer ]]; then
+                continue
+             fi
 
-            hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
+             hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
 
-            #  Upload to S3
-            aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
+             # Upload to S3
+             aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
 
-            #  Write only Lambda function hashes to tfvars_out
-            if [ $first -eq 1 ]; then
-              first=0
-            else
-              echo "," >> tfvars_out/source_code.tfvars.json
-            fi
+             if [ $first -eq 1 ]; then
+               first=0
+             else
+               echo "," >> tfvars_out/source_code.tfvars.json
+             fi
 
-            echo "  \"$name\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
-          done
+             echo "  \"$name\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
+           done
+          fi
 
           echo "} }" >> tfvars_out/source_code.tfvars.json
 
