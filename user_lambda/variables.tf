@@ -15,7 +15,7 @@ variable "env" {
   type = string
 }
 
-variable "lambda_functions" {
+variable "function_config" {
   type = map(object({
     purpose               = string
     handler               = string
