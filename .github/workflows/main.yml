@@ -210,7 +210,12 @@ jobs:
 
           echo "} }" >> tfvars_out/source_code.tfvars.json
 
-          
+      - name: Upload tfvars_out to Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfvars-${{ matrix.folder }}
+          path: ${{ matrix.folder }}/tfvars_out/source_code.tfvars.json
+
       - name: Terraform Init
         run: terraform init
         working-directory: ${{ matrix.folder }}
@@ -246,6 +251,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Download tfvars_out from Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfvars-${{ matrix.folder }}
+          path: ${{ matrix.folder }}/tfvars_out
+      
       - name: Terraform Init
         run: terraform init
         working-directory: ${{ matrix.folder }}
