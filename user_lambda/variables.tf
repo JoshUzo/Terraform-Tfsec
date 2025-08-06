@@ -18,7 +18,7 @@ variable "env" {
 variable "lambda_functions" {
   type = map(object({
     purpose               = string
-    handler               = strisng
+    handler               = string
     runtime               = string
     role_arn              = string
     environment_variables = map(string)
