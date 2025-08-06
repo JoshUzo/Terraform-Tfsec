@@ -1,9 +1,9 @@
-#this is mainv27
+#this is mainv28
 
 locals {
   s3_buckets = {
     brown = {
-      purpose = "brown"
+      purpose = "green"
     }
     blue = {
       purpose = "blue"
