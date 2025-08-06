@@ -36,6 +36,13 @@ variable "lambda_functions" {
   }))
 }
 
+variable "source_code_hashes" {
+  type = map(object({
+    source_code_hash = string
+  }))
+  default = {}
+}
+
 variable "lambda_artifact_bucket" {
   description = "S3 bucket where Lambda and Layer ZIPs are stored"
   type        = string
