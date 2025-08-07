@@ -188,7 +188,8 @@ jobs:
         run: |
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
-          echo "{" > tfvars_out/source_code.tfvars.json
+          
+          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
 
           first=1
           if compgen -G "build/*.zip" > /dev/null; then
@@ -218,7 +219,7 @@ jobs:
             done
           fi
 
-          echo "}" >> tfvars_out/source_code.tfvars.json
+          echo "} }" >> tfvars_out/source_code.tfvars.json
 
       - name: Upload tfvars_out to Artifact
         uses: actions/upload-artifact@v4
