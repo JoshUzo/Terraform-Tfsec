@@ -40,7 +40,7 @@ lambda_functions = {
     }
 
     s3_key            = "lambdas/digest_index.zip"
-    source_code_hash  = "REPLACED BY CICD"
+    source_code_hash  = "REPLACE BY CICD"
 
     create_layer      = true
     layer_s3_key      = "layers/digest_index.zip"

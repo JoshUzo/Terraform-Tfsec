@@ -168,8 +168,8 @@ jobs:
             mkdir -p build
           fi
 
-          if [ -d lambdas ]; then
-            for dir in lambdas/*; do
+          if [ -d python ]; then
+            for dir in python/*; do
               [ -d "$dir" ] || continue  # Skip non-directories
               name=$(basename "$dir")
               zip -r "build/${name}.zip" "$dir"
