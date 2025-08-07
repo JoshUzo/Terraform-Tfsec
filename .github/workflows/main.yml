@@ -201,7 +201,12 @@ jobs:
               hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
 
               # Upload to S3
-              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
+              
+              if [[ "$zip" == *"_layer.zip" ]]; then
+                aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${zip##*/}"
+              else
+                aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${zip##*/}"
+              fi
 
               if [ $first -eq 1 ]; then
                 first=0
