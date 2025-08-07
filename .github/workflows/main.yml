@@ -196,26 +196,30 @@ jobs:
             for zip in build/*.zip; do
               name=$(basename "$zip" .zip)
 
-              # Skip layer zip files
-              if [[ "$name" == *_layer ]]; then continue; fi
-
+              # Calculate hash only for function zips (not layers)
+            if [[ "$name" != *_layer ]]; then
               hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
+            fi
 
               # Upload to S3
               
-              if [[ "$zip" == *"_layer.zip" ]]; then
-                aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${zip##*/}"
+              if [[ "$name" == *_layer ]]; then
+                # Strip _layer from the S3 key so it matches dev.tfvars
+                base="${name%_layer}"
+                aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${base}.zip"
               else
-                aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${zip##*/}"
+                aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${name}.zip"
+
+
+              if [[ "$name" != *_layer ]]; then
+               if [ $first -eq 1 ]; then
+                 first=0
+               else
+                 echo "," >> tfvars_out/source_code.tfvars.json
+               fi
+                 echo "  \"${name}\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
               fi
 
-              if [ $first -eq 1 ]; then
-                first=0
-              else
-                echo "," >> tfvars_out/source_code.tfvars.json
-              fi
-
-              echo "  \"${name}\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
             done
           fi
 
