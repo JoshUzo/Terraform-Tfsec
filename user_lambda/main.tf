@@ -1,7 +1,7 @@
-#new comment60
+#new comment61
 module "lambda_functions" {
   source = "../modules/lambda"
-  for_each = local.merged_lambda_functions
+  for_each = local.lambda_configs
 
 
   purpose                = each.value.purpose
