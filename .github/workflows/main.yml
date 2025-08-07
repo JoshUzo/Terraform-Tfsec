@@ -215,7 +215,7 @@ jobs:
                 echo "," >> tfvars_out/source_code.tfvars.json
               fi
 
-              echo "  \"lambda_functions.${name}.source_code_hash\": \"$hash\"" >> tfvars_out/source_code.tfvars.json
+              echo "  \"${name}\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
             done
           fi
 
