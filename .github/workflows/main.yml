@@ -187,37 +187,33 @@ jobs:
       - name: Upload Artifacts to S3 and Generate Hashes (if applicable)
         run: |
           cd ${{ matrix.folder }}
-    
           mkdir -p tfvars_out
-          echo '{ "lambda_functions": {' > tfvars_out/source_code.tfvars.json
+          echo "{" > tfvars_out/source_code.tfvars.json
 
           first=1
-
           if compgen -G "build/*.zip" > /dev/null; then
             for zip in build/*.zip; do
               name=$(basename "$zip" .zip)
 
-              # Skip layer zip files (ending in _layer.zip)
-              if [[ "$name" == *_layer ]]; then
-                continue
-             fi
+              # Skip layer zip files
+              if [[ "$name" == *_layer ]]; then continue; fi
 
-             hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
+              hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
 
-             # Upload to S3
-             aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
+              # Upload to S3
+              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/$zip"
 
-             if [ $first -eq 1 ]; then
-               first=0
-             else
-               echo "," >> tfvars_out/source_code.tfvars.json
-             fi
+              if [ $first -eq 1 ]; then
+                first=0
+              else
+                echo "," >> tfvars_out/source_code.tfvars.json
+              fi
 
-             echo "  \"$name\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
-           done
+              echo "  \"lambda_functions.${name}.source_code_hash\": \"$hash\"" >> tfvars_out/source_code.tfvars.json
+            done
           fi
 
-          echo "} }" >> tfvars_out/source_code.tfvars.json
+          echo "}" >> tfvars_out/source_code.tfvars.json
 
       - name: Upload tfvars_out to Artifact
         uses: actions/upload-artifact@v4
