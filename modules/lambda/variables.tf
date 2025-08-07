@@ -105,8 +105,7 @@ variable "lambda_s3_key" {
 
 variable "source_code_hash" {
   description = "Base64-encoded SHA256 hash of the Lambda zip file"
-  type        = string
-  default     = null
+  type        = optional(string)
 }
 
 variable "layer_s3_bucket" {
