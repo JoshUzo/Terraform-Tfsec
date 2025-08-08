@@ -17,13 +17,13 @@ lambda_functions = {
     }
 
     # S3-based deployment (CI/CD uploads this ZIP)
-    s3_key            = "lambdas/data_cleaner.zip"
+    s3_key            = "lambdas/data_cleaner.zip"  # possible make this variable
     source_code_hash  = "REPLACE BY CICD"
 
 
     # Optional Layer 
     create_layer      = true
-    layer_s3_key      = "layers/data_cleaner.zip"
+    layer_s3_key      = "layers/data_cleaner.zip"  # possible make this variable
     layers            = []
     s3_event          = null
 
