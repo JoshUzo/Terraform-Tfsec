@@ -1,4 +1,4 @@
-#new comment71
+#new comment 72
 module "lambda_functions" {
   source = "../modules/lambda"
   for_each = local.lambda_configs
@@ -10,7 +10,8 @@ module "lambda_functions" {
 
   lambda_s3_bucket       = var.lambda_artifact_bucket
   lambda_s3_key          = each.value.s3_key
-  source_code_hash       = each.value.source_code_hash
+  source_code_hash       = try(each.value.source_code_hash, null)
+
 
   role_arn               = each.value.role_arn
   environment_variables  = each.value.environment_variables

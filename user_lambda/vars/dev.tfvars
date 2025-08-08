@@ -6,7 +6,7 @@ aws_region   = "us-east-2"
 lambda_artifact_bucket = "htown-dev-lambda-artifacts"  # S3 bucket where CI/CD stores Lambda & layer zips
 
 lambda_functions = {
-  cleaner = {
+  data_cleaner = {
     purpose      = "cleaning"
     handler      = "clean.handler"
     runtime      = "python3.9"

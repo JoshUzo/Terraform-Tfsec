@@ -1,8 +1,13 @@
 locals {
   lambda_configs = {
-    for k, v in var.lambda_functions : k => merge(
-      v,
-      lookup(var.source_code_hashes, k, { source_code_hash = "" })
+    for name, cfg in var.lambda_functions :
+    name => merge(
+      cfg,
+      contains(keys(var.source_code_hashes), name)
+        && try(var.source_code_hashes[name].source_code_hash, null) != null
+        ? { source_code_hash = var.source_code_hashes[name].source_code_hash }
+        : {}
     )
   }
 }
+
