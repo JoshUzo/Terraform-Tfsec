@@ -188,7 +188,7 @@ jobs:
         run: |
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
-          
+    
           echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
 
           first=1
@@ -197,12 +197,11 @@ jobs:
               name=$(basename "$zip" .zip)
 
               # Calculate hash only for function zips (not layers)
-            if [[ "$name" != *_layer ]]; then
-              hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
-            fi
+              if [[ "$name" != *_layer ]]; then
+                hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
+              fi
 
               # Upload to S3
-              
               if [[ "$name" == *_layer ]]; then
                 # Strip _layer from the S3 key so it matches dev.tfvars
                 base="${name%_layer}"
@@ -210,20 +209,22 @@ jobs:
               else
                 aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${name}.zip"
 
-
-              if [[ "$name" != *_layer ]]; then
-               if [ $first -eq 1 ]; then
-                 first=0
-               else
-                 echo "," >> tfvars_out/source_code.tfvars.json
-               fi
-                 echo "  \"${name}\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
-              fi
+                # Append hash JSON only for non-layer zips
+                if [[ "$name" != *_layer ]]; then
+                  if [ $first -eq 1 ]; then
+                    first=0
+                  else
+                    echo "," >> tfvars_out/source_code.tfvars.json
+                  fi
+                  echo "  \"${name}\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
+                fi
+              fi   # <-- closes the "if [[ "$name" == *_layer ]]" block
 
             done
           fi
 
           echo "} }" >> tfvars_out/source_code.tfvars.json
+
 
       - name: Upload tfvars_out to Artifact
         uses: actions/upload-artifact@v4
