@@ -17,7 +17,7 @@ lambda_functions = {
     }
 
     # S3-based deployment (CI/CD uploads this ZIP)
-    s3_key            = "lambdas/cleaner.zip"
+    s3_key            = "lambdas/data_cleaner.zip"
     source_code_hash  = "REPLACE BY CICD"
 
 
