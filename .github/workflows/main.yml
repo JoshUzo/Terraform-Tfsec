@@ -160,59 +160,58 @@ jobs:
 
       # Terraform Execution (After Approval)
 
-      - name: Zip ONLY changed Lambda code and layers
+      - name: Zip Lambda code and layers (zip everything, stable output)
         run: |
+          set -euo pipefail
           cd ${{ matrix.folder }}
           mkdir -p build tfvars_out
 
-          # Determine diff base (handles workflow_dispatch)
+          if [ -d python ]; then
+            for dir in python/*; do
+              [ -d "$dir" ] || continue
+              name=$(basename "$dir")
+              # -X strips extra attrs for deterministic zips
+              zip -r -X "build/${name}.zip" "$dir"
+            done
+          fi
+
+          if [ -d layers ]; then
+            for dir in layers/*; do
+              [ -d "$dir" ] || continue
+              name=$(basename "$dir")
+              zip -r -X "build/${name}_layer.zip" "$dir"
+            done
+          fi
+
+
+      - name: Upload artifacts to S3 and write overrides (hash only changed funcs)
+        run: |
+          set -euo pipefail
+          cd ${{ matrix.folder }}
+          mkdir -p tfvars_out
+
+          # Detect changed files between before/after (with safe fallback)
           BEFORE="${{ github.event.before }}"
           if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
             BEFORE="$(git rev-parse HEAD^ || echo "")"
           fi
 
-          # List changed files in this user folder
           if [ -n "$BEFORE" ]; then
-            changed=$(git diff --name-only "$BEFORE" ${{ github.sha }} -- .)
+            changed_files=$(git diff --name-only "$BEFORE" ${{ github.sha }} -- .)
           else
-            # Fallback: treat all files as changed on first run
-            changed=$(git ls-files)
+            changed_files=$(git ls-files)
           fi
 
-          # Extract changed lambda dirs under python/ and layers/
-          changed_funcs=$(echo "$changed" | grep -E '^python/[^/]+/' | cut -d/ -f2 | sort -u || true)
-          changed_layers=$(echo "$changed" | grep -E '^layers/[^/]+/' | cut -d/ -f2 | sort -u || true)
+          echo "=== Changed files (scoped to ${{ matrix.folder }}) ==="
+          echo "$changed_files"
 
-          if [ -z "$changed_funcs$changed_layers" ]; then
-            echo "No lambda or layer changes detected."
-            # Still emit a valid overrides file so TF can run
-            echo '{ "source_code_hashes": {} }' > tfvars_out/source_code.tfvars.json
-            exit 0
-          fi
+          # Build set of changed function names under python/<func>/
+          # (pattern works whether python is at root or nested)
+          changed_funcs=$(echo "$changed_files" | grep -E '(^|.*/)python/[^/]+/' | awk -F/ '{print $2}' | sort -u || true)
+          echo "=== Changed functions ==="
+          echo "${changed_funcs:-<none>}"
 
-          # Zip only changed functions (strip extra attrs with -X for more stable zips)
-          if [ -n "$changed_funcs" ]; then
-            for name in $changed_funcs; do
-              zip -r -X "build/${name}.zip" "python/${name}"
-            done
-          fi
-
-          # Zip only changed layers
-          if [ -n "$changed_layers" ]; then
-            for name in $changed_layers; do
-              zip -r -X "build/${name}_layer.zip" "layers/${name}"
-            done
-          fi
-
-      - name: Upload ONLY changed artifacts to S3 and write overrides
-        run: |
-          cd ${{ matrix.folder }}
-          mkdir -p tfvars_out
-
-          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
-          first=1
-
-          # Upload changed layers
+          # Upload layers (no hashes)
           if compgen -G "build/*_layer.zip" > /dev/null; then
             for zip in build/*_layer.zip; do
               base="$(basename "$zip" .zip)"
@@ -221,22 +220,34 @@ jobs:
             done
           fi
 
-          # Upload changed functions and emit hashes
+          # Start JSON
+          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
+          first=1
+
+          # Upload all function zips, but only EMIT HASH for functions that changed
           if compgen -G "build/*.zip" > /dev/null; then
             for zip in build/*.zip; do
               base="$(basename "$zip" .zip)"
-              # skip layer zips in this loop
-              if [[ "$base" == *_layer ]]; then continue; fi
+              [[ "$base" == *_layer ]] && continue
 
               aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${base}.zip"
-              hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
 
-              if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
-              echo "  \"${base}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
+              if echo " $changed_funcs " | grep -qw "$base"; then
+                hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
+                if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+                echo "  \"${base}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
+                echo "Emitted hash override for changed function: $base"
+              else
+                echo "No code change for $base; not emitting hash."
+              fi
             done
           fi
 
           echo "} }" >> tfvars_out/source_code.tfvars.json
+
+          echo "=== tfvars_out/source_code.tfvars.json ==="
+          cat tfvars_out/source_code.tfvars.json
+
 
       - name: Upload tfvars_out to Artifact
         uses: actions/upload-artifact@v4
