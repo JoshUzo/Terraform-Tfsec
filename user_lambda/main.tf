@@ -19,7 +19,7 @@ module "lambda_functions" {
 
   create_layer = try(each.value.create_layer, false)
   layer_s3_bucket        = var.lambda_artifact_bucket
-  layer_s3_key           = try(each.value.layer_s3_key, "")
+  layer_s3_key           = try(each.value.layer_s3_key, null)
   layers       = try(each.value.layers, [])
 
   organization  = var.organization
