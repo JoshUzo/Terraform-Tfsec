@@ -5,7 +5,7 @@ def handler(event, context):
         "First Name": "Alice",
         "Age": "30",
         "Email": None,
-        "EmptyList": ["first", "sixth"],
+        "EmptyList": ["first", "seventh"],
         "EmptyDict": {"help":"value6"},
     }
 
