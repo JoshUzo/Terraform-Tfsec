@@ -87,7 +87,7 @@ jobs:
           fi
 
 
-       # Uncomment this block to enforce security gates before apply
+       # Enforce security gates before apply
       - name: Fail on critical/high KICS issues
         run: |
            count=$(jq '[.queries[] | select(.severity == "HIGH" or .severity == "CRITICAL")] | length' ${{ matrix.folder }}/kics-output/results.json)
@@ -160,71 +160,83 @@ jobs:
 
       # Terraform Execution (After Approval)
 
-      - name: Zip Lambda Code and Layer (if applicable)
+      - name: Zip ONLY changed Lambda code and layers
         run: |
           cd ${{ matrix.folder }}
-    
-          if [ -d python ] || [ -d layers ]; then
-            mkdir -p build
+          mkdir -p build tfvars_out
+
+          # Determine diff base (handles workflow_dispatch)
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE="$(git rev-parse HEAD^ || echo "")"
           fi
 
-          if [ -d python ]; then
-            for dir in python/*; do
-              [ -d "$dir" ] || continue  # Skip non-directories
-              name=$(basename "$dir")
-              zip -r "build/${name}.zip" "$dir"
+          # List changed files in this user folder
+          if [ -n "$BEFORE" ]; then
+            changed=$(git diff --name-only "$BEFORE" ${{ github.sha }} -- .)
+          else
+            # Fallback: treat all files as changed on first run
+            changed=$(git ls-files)
+          fi
+
+          # Extract changed lambda dirs under python/ and layers/
+          changed_funcs=$(echo "$changed" | grep -E '^python/[^/]+/' | cut -d/ -f2 | sort -u || true)
+          changed_layers=$(echo "$changed" | grep -E '^layers/[^/]+/' | cut -d/ -f2 | sort -u || true)
+
+          if [ -z "$changed_funcs$changed_layers" ]; then
+            echo "No lambda or layer changes detected."
+            # Still emit a valid overrides file so TF can run
+            echo '{ "source_code_hashes": {} }' > tfvars_out/source_code.tfvars.json
+            exit 0
+          fi
+
+          # Zip only changed functions (strip extra attrs with -X for more stable zips)
+          if [ -n "$changed_funcs" ]; then
+            for name in $changed_funcs; do
+              zip -r -X "build/${name}.zip" "python/${name}"
             done
           fi
 
-          if [ -d layers ]; then
-            for dir in layers/*; do
-              [ -d "$dir" ] || continue
-              name=$(basename "$dir")
-              zip -r "build/${name}_layer.zip" "$dir"
+          # Zip only changed layers
+          if [ -n "$changed_layers" ]; then
+            for name in $changed_layers; do
+              zip -r -X "build/${name}_layer.zip" "layers/${name}"
             done
           fi
 
-      - name: Upload Artifacts to S3 and Generate Hashes (if applicable)
+      - name: Upload ONLY changed artifacts to S3 and write overrides
         run: |
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
-    
-          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
 
+          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
           first=1
+
+          # Upload changed layers
+          if compgen -G "build/*_layer.zip" > /dev/null; then
+            for zip in build/*_layer.zip; do
+              base="$(basename "$zip" .zip)"
+              name="${base%_layer}"
+              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${name}.zip"
+            done
+          fi
+
+          # Upload changed functions and emit hashes
           if compgen -G "build/*.zip" > /dev/null; then
             for zip in build/*.zip; do
-              name=$(basename "$zip" .zip)
+              base="$(basename "$zip" .zip)"
+              # skip layer zips in this loop
+              if [[ "$base" == *_layer ]]; then continue; fi
 
-              # Calculate hash only for function zips (not layers)
-              if [[ "$name" != *_layer ]]; then
-                hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64)
-              fi
+              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${base}.zip"
+              hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
 
-              # Upload to S3
-              if [[ "$name" == *_layer ]]; then
-                # Strip _layer from the S3 key so it matches dev.tfvars
-                base="${name%_layer}"
-                aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${base}.zip"
-              else
-                aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${name}.zip"
-
-                # Append hash JSON only for non-layer zips
-                if [[ "$name" != *_layer ]]; then
-                  if [ $first -eq 1 ]; then
-                    first=0
-                  else
-                    echo "," >> tfvars_out/source_code.tfvars.json
-                  fi
-                  echo "  \"${name}\": { \"source_code_hash\": \"$hash\" }" >> tfvars_out/source_code.tfvars.json
-                fi
-              fi   # <-- closes the "if [[ "$name" == *_layer ]]" block
-
+              if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+              echo "  \"${base}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
             done
           fi
 
           echo "} }" >> tfvars_out/source_code.tfvars.json
-
 
       - name: Upload tfvars_out to Artifact
         uses: actions/upload-artifact@v4
