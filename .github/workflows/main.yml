@@ -164,95 +164,72 @@ jobs:
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
-          mkdir -p build tfvars_out
+          mkdir -p build
 
-          # Zip ALL functions with -X (strip extra attrs) for stable byte-for-byte outputs
+          # Normalize mtimes so identical sources make identical zips (optional but helps)
+          if [ -d python ]; then
+            find python -type f -not -path "*/.venv/*" -not -path "*/__pycache__/*" -exec touch -t 200001010000 {} +
+          fi
+          if [ -d layers ]; then
+            find layers -type f -not -path "*/.venv/*" -not -path "*/__pycache__/*" -exec touch -t 200001010000 {} +
+          fi
+
           if [ -d python ]; then
             for dir in python/*; do
               [ -d "$dir" ] || continue
               name=$(basename "$dir")
-              zip -r -X "build/${name}.zip" "$dir"
+              zip -r -X "build/${name}.zip" "python/${name}" \
+                -x "**/__pycache__/*" "**/*.pyc" "**/.DS_Store" ".venv/*"
             done
           fi
 
-          # Zip ALL custom layers deterministically
           if [ -d layers ]; then
             for dir in layers/*; do
               [ -d "$dir" ] || continue
               name=$(basename "$dir")
-              zip -r -X "build/${name}_layer.zip" "$dir"
+              zip -r -X "build/${name}_layer.zip" "layers/${name}" \
+                -x "**/__pycache__/*" "**/*.pyc" "**/.DS_Store" ".venv/*"
             done
           fi
 
+          echo "Built zips:"; ls -l build || true
 
-      - name: Upload ONLY changed artifacts to S3 and write overrides (fixed path normalization)
+
+
+      - name: Upload artifacts to S3 and write overrides (emit ALL hashes)
         run: |
-           set -euo pipefail
-           cd ${{ matrix.folder }}
-           mkdir -p tfvars_out
+          set -euo pipefail
+          cd ${{ matrix.folder }}
+          mkdir -p tfvars_out
 
-           # Figure out commit range safely
-           BEFORE="${{ github.event.before }}"
-           if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-             BEFORE="$(git rev-parse HEAD^ || echo "")"
-           fi
+          # Upload layers (no hash needed)
+          if compgen -G "build/*_layer.zip" > /dev/null; then
+            for zip in build/*_layer.zip; do
+              base="$(basename "$zip" .zip)"; name="${base%_layer}"
+              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${name}.zip"
+            done
+          fi
 
-           # Get changed files (repo-root paths), scoped to this folder
-           FOLDER="${{ matrix.folder }}"
-           if [ -n "$BEFORE" ]; then
-             changed_files=$(git diff --name-only "$BEFORE" ${{ github.sha }} -- "$FOLDER")
-           else
-             changed_files=$(git ls-files "$FOLDER")
-           fi
-           echo "=== Changed files (repo-root paths) ==="; echo "$changed_files"
+          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
+          first=1
 
-           # Normalize to paths relative to this folder (strip 'user_lambda/' prefix)
-           changed_rel=$(echo "$changed_files" | sed -E "s#^${FOLDER}/##")
-           echo "=== Changed files (relative to ${FOLDER}) ==="; echo "$changed_rel"
+          # Upload ALL function zips, emit their hashes (deterministic = no unwanted updates)
+          if compgen -G "build/*.zip" > /dev/null; then
+            for zip in build/*.zip; do
+              base="$(basename "$zip" .zip)"
+              [[ "$base" == *_layer ]] && continue
+              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${base}.zip"
+              hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
+              if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+              echo "  \"${base}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
+            done
+          else
+            echo "ERROR: no function zips found in build/" >&2
+          fi
 
-           # Detect changed functions and layers relative to this folder
-           changed_funcs=$(echo "$changed_rel"  | grep -E '^python/[^/]+/' | cut -d/ -f2 | sort -u || true)
-           changed_layers=$(echo "$changed_rel" | grep -E '^layers/[^/]+/' | cut -d/ -f2 | sort -u || true)
-           echo "=== Changed functions ==="; echo "${changed_funcs:-<none>}"
-           echo "=== Changed layers ===";    echo "${changed_layers:-<none>}"
-
-           # Upload only CHANGED layers
-           if [ -n "${changed_layers:-}" ]; then
-             for name in $changed_layers; do
-               zip_path="build/${name}_layer.zip"
-               if [ -f "$zip_path" ]; then
-                 aws s3 cp "$zip_path" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${name}.zip"
-                 echo "Uploaded changed layer: $name"
-               else
-                 echo "WARN: $zip_path not found for changed layer $name"
-               fi
-             done
-           fi
-
-           # Write overrides only for CHANGED functions
-           echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
-           first=1
-           if [ -n "${changed_funcs:-}" ]; then
-             for name in $changed_funcs; do
-               zip_path="build/${name}.zip"
-               if [ -f "$zip_path" ]; then
-                 aws s3 cp "$zip_path" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${name}.zip"
-                 hash=$(openssl dgst -sha256 -binary "$zip_path" | openssl base64 -A)
-                 if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
-                 echo "  \"${name}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
-                 echo "Emitted hash for changed function: $name"
-               else
-                 echo "WARN: $zip_path not found for changed function $name"
-               fi
-             done
-           else
-             echo "No function code changes detected; not emitting hashes."
-           fi
-
-           echo "} }" >> tfvars_out/source_code.tfvars.json
-           echo "=== overrides JSON ==="
-           cat tfvars_out/source_code.tfvars.json
-
+          echo "} }" >> tfvars_out/source_code.tfvars.json
+          echo "=== overrides JSON ==="
+          cat tfvars_out/source_code.tfvars.json
 
 
       - name: Upload tfvars_out to Artifact
