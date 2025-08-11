@@ -158,9 +158,21 @@ jobs:
           fi
 
 
+      - name: Detect lambda content
+        id: detect-lambda
+        run: |
+          cd ${{ matrix.folder }}
+          if [ -d python ] || [ -d layers ]; then
+            echo "has_lambda=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_lambda=false" >> $GITHUB_OUTPUT
+          fi
+
+
       # Terraform Execution (After Approval)
 
       - name: Zip Lambda code and layers (reproducible)
+        if: steps.detect-lambda.outputs.has_lambda == 'true'
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
@@ -216,6 +228,7 @@ jobs:
 
 
       - name: Upload artifacts and write overrides (gated by content hash)
+        if: steps.detect-lambda.outputs.has_lambda == 'true'
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
@@ -305,6 +318,13 @@ jobs:
           echo "=== overrides JSON ==="
           cat tfvars_out/source_code.tfvars.json
 
+
+      - name: Write empty overrides (no Lambda in this folder)
+        if: steps.detect-lambda.outputs.has_lambda != 'true'
+        run: |
+          cd ${{ matrix.folder }}
+          mkdir -p tfvars_out
+          echo '{ "source_code_hashes": {} }' > tfvars_out/source_code.tfvars.json
 
 
       - name: Upload tfvars_out to Artifact
