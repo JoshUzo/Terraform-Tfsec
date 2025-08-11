@@ -203,45 +203,54 @@ jobs:
             changed_files=$(git ls-files)
           fi
 
-          echo "=== Changed files in this folder ==="; echo "$changed_files"
+          echo "=== Changed files in this folder ==="
+          echo "$changed_files"
 
-          # Functions whose code changed under python/<func>/** (robust: not anchored)
-          changed_funcs=$(echo "$changed_files" | grep -E '(^|.*/)python/[^/]+/' | awk -F/ '{print $2}' | sort -u || true)
-          echo "=== Changed functions ==="; echo "${changed_funcs:-<none>}"
+          changed_funcs=$(echo "$changed_files" | grep -E '^python/[^/]+/' | cut -d/ -f2 | sort -u || true)
+          changed_layers=$(echo "$changed_files" | grep -E '^layers/[^/]+/' | cut -d/ -f2 | sort -u || true)
 
-          # Upload layers (no hashes)
-          if compgen -G "build/*_layer.zip" > /dev/null; then
-            for zip in build/*_layer.zip; do
-              base="$(basename "$zip" .zip)"; name="${base%_layer}"
-              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${name}.zip"
-            done
-          fi
+          echo "=== Changed functions ==="
+          echo "${changed_funcs:-<none>}"
+          echo "=== Changed layers ==="
+          echo "${changed_layers:-<none>}"
 
-          # Start overrides JSON
-          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
-          first=1
-
-          # Upload all function zips, but only emit hashes for CHANGED funcs
-          if compgen -G "build/*.zip" > /dev/null; then
-            for zip in build/*.zip; do
-              base="$(basename "$zip" .zip)"
-              [[ "$base" == *_layer ]] && continue
-
-              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${base}.zip"
-
-              if echo " $changed_funcs " | grep -qw "$base"; then
-                hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
-                if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
-                echo "  \"${base}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
-                echo "Emitted hash for changed function: $base"
+          # Upload only CHANGED layers
+          if [ -n "${changed_layers:-}" ]; then
+            for name in $changed_layers; do
+              zip_path="build/${name}_layer.zip"
+              if [ -f "$zip_path" ]; then
+                aws s3 cp "$zip_path" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${name}.zip"
+                echo "Uploaded changed layer: $name"
               else
-                echo "No code change for $base; not emitting hash."
+                echo "WARN: $zip_path not found for changed layer $name"
               fi
             done
           fi
 
+          # Write overrides only for CHANGED functions
+          echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
+          first=1
+
+          if [ -n "${changed_funcs:-}" ]; then
+            for name in $changed_funcs; do
+              zip_path="build/${name}.zip"
+              if [ -f "$zip_path" ]; then
+                aws s3 cp "$zip_path" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${name}.zip"
+                hash=$(openssl dgst -sha256 -binary "$zip_path" | openssl base64 -A)
+                if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+                echo "  \"${name}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
+                echo "Emitted hash for changed function: $name"
+              else
+                echo "WARN: $zip_path not found for changed function $name"
+              fi
+            done
+          else
+            echo "No function code changes detected; not emitting hashes."
+          fi
+
           echo "} }" >> tfvars_out/source_code.tfvars.json
-          echo "=== overrides JSON ==="; cat tfvars_out/source_code.tfvars.json
+          echo "=== overrides JSON ==="
+          cat tfvars_out/source_code.tfvars.json
 
 
       - name: Upload tfvars_out to Artifact
