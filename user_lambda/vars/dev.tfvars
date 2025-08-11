@@ -18,7 +18,7 @@ lambda_functions = {
 
     # S3-based deployment (CI/CD uploads this ZIP)
     s3_key            = "lambdas/data_cleaner.zip"  # possible make this variable
-    source_code_hash  = "REPLACE BY CICD"
+    #source_code_hash  = "REPLACE BY CICD"
 
 
     # Optional Layer 
@@ -40,7 +40,7 @@ lambda_functions = {
     }
 
     s3_key            = "lambdas/digest_index.zip"
-    source_code_hash  = "REPLACE BY CICD"
+    #source_code_hash  = "REPLACE BY CICD"
 
     create_layer      = true
     layer_s3_key      = "layers/digest_index.zip"
