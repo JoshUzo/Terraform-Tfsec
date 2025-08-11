@@ -160,36 +160,55 @@ jobs:
 
       # Terraform Execution (After Approval)
 
-      - name: Zip Lambda code and layers (deterministic)
+      - name: Zip Lambda code and layers (reproducible)
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
           mkdir -p build
 
-          # 1) Normalize mtimes so the same sources => identical ZIP bytes every run
-          if [ -d python ]; then
-            # set all tracked files to a fixed timestamp
-            git ls-files python | xargs -I{} touch -t 200001010000 {}
-          fi
-          if [ -d layers ]; then
-            git ls-files layers | xargs -I{} touch -t 200001010000 {}
-          fi
+          normalize_dir() {
+            local dir="$1"
+            # Normalize mtimes of tracked files so zip timestamps are stable
+            if git ls-files "$dir" >/dev/null 2>&1; then
+              git ls-files "$dir" | xargs -I{} touch -t 200001010000 {}
+            else
+              # Fallback if directory isn’t tracked (rare)
+              find "$dir" -type f -print0 | xargs -0 -I{} touch -t 200001010000 {}
+            fi
+          }
 
-          # 2) Zip everything, stripping extra attrs and excluding transient files
+          make_zip() {
+            # make_zip <src_dir> <zip_out>
+            local src="$1"
+            local out="$2"
+            # Build a sorted list of files, excluding noise
+            mapfile -t files < <(cd "$src" && \
+              find . -type f \
+                ! -path "*/__pycache__/*" \
+                ! -name "*.pyc" \
+                ! -path "*/.DS_Store" \
+                ! -path "*/.venv/*" \
+              | LC_ALL=C sort)
+            # Create the zip with stable attrs (-X) and deterministic file order
+            rm -f "$out"
+            (cd "$src" && zip -X -q "$OLDPWD/$out" "${files[@]}")
+          }
+
           if [ -d python ]; then
             for dir in python/*; do
               [ -d "$dir" ] || continue
               name=$(basename "$dir")
-              zip -r -X "build/${name}.zip" "python/${name}" \
-                -x "**/__pycache__/*" "**/*.pyc" "**/.DS_Store" ".venv/*"
+              normalize_dir "$dir"
+              make_zip "$dir" "build/${name}.zip"
             done
           fi
+
           if [ -d layers ]; then
             for dir in layers/*; do
               [ -d "$dir" ] || continue
               name=$(basename "$dir")
-              zip -r -X "build/${name}_layer.zip" "layers/${name}" \
-                -x "**/__pycache__/*" "**/*.pyc" "**/.DS_Store" ".venv/*"
+              normalize_dir "$dir"
+              make_zip "$dir" "build/${name}_layer.zip"
             done
           fi
 
