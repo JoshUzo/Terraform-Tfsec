@@ -166,14 +166,16 @@ jobs:
           cd ${{ matrix.folder }}
           mkdir -p build
 
-          # Normalize mtimes so identical sources make identical zips (optional but helps)
+          # 1) Normalize mtimes so the same sources => identical ZIP bytes every run
           if [ -d python ]; then
-            find python -type f -not -path "*/.venv/*" -not -path "*/__pycache__/*" -exec touch -t 200001010000 {} +
+            # set all tracked files to a fixed timestamp
+            git ls-files python | xargs -I{} touch -t 200001010000 {}
           fi
           if [ -d layers ]; then
-            find layers -type f -not -path "*/.venv/*" -not -path "*/__pycache__/*" -exec touch -t 200001010000 {} +
+            git ls-files layers | xargs -I{} touch -t 200001010000 {}
           fi
 
+          # 2) Zip everything, stripping extra attrs and excluding transient files
           if [ -d python ]; then
             for dir in python/*; do
               [ -d "$dir" ] || continue
@@ -182,7 +184,6 @@ jobs:
                 -x "**/__pycache__/*" "**/*.pyc" "**/.DS_Store" ".venv/*"
             done
           fi
-
           if [ -d layers ]; then
             for dir in layers/*; do
               [ -d "$dir" ] || continue
@@ -193,7 +194,6 @@ jobs:
           fi
 
           echo "Built zips:"; ls -l build || true
-
 
 
       - name: Upload artifacts to S3 and write overrides (emit ALL hashes)
