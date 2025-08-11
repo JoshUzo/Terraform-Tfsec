@@ -2,8 +2,8 @@
 
 locals {
   s3_buckets = {
-    brown = {
-      purpose = "green"
+    finesse = {
+      purpose = "finesse"
     }
     blue = {
       purpose = "blue"
