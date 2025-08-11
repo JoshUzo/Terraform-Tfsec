@@ -185,45 +185,63 @@ jobs:
           fi
 
 
-      - name: Upload artifacts to S3 and write overrides (emit ALL function hashes)
+      - name: Upload artifacts to S3 and write overrides (hash only changed funcs)
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
 
+          # Figure out the commit range safely
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE="$(git rev-parse HEAD^ || echo "")"
+          fi
+
+          if [ -n "$BEFORE" ]; then
+            changed_files=$(git diff --name-only "$BEFORE" ${{ github.sha }} -- .)
+          else
+            changed_files=$(git ls-files)
+          fi
+
+          echo "=== Changed files in this folder ==="; echo "$changed_files"
+
+          # Functions whose code changed under python/<func>/** (robust: not anchored)
+          changed_funcs=$(echo "$changed_files" | grep -E '(^|.*/)python/[^/]+/' | awk -F/ '{print $2}' | sort -u || true)
+          echo "=== Changed functions ==="; echo "${changed_funcs:-<none>}"
+
           # Upload layers (no hashes)
           if compgen -G "build/*_layer.zip" > /dev/null; then
             for zip in build/*_layer.zip; do
-              base="$(basename "$zip" .zip)"
-              name="${base%_layer}"
+              base="$(basename "$zip" .zip)"; name="${base%_layer}"
               aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${name}.zip"
             done
           fi
 
-          # Start JSON
+          # Start overrides JSON
           echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
           first=1
 
-          # Upload ALL function zips and emit their hashes
+          # Upload all function zips, but only emit hashes for CHANGED funcs
           if compgen -G "build/*.zip" > /dev/null; then
             for zip in build/*.zip; do
               base="$(basename "$zip" .zip)"
               [[ "$base" == *_layer ]] && continue
 
               aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${base}.zip"
-              hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
 
-              if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
-              echo "  \"${base}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
+              if echo " $changed_funcs " | grep -qw "$base"; then
+                hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
+                if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+                echo "  \"${base}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
+                echo "Emitted hash for changed function: $base"
+              else
+                echo "No code change for $base; not emitting hash."
+              fi
             done
-          else
-            echo "No function zips found in build/ !" >&2
           fi
 
           echo "} }" >> tfvars_out/source_code.tfvars.json
-
-          echo "=== overrides JSON ==="
-          cat tfvars_out/source_code.tfvars.json
+          echo "=== overrides JSON ==="; cat tfvars_out/source_code.tfvars.json
 
 
       - name: Upload tfvars_out to Artifact
