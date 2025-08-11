@@ -215,40 +215,96 @@ jobs:
           echo "Built zips:"; ls -l build || true
 
 
-      - name: Upload artifacts to S3 and write overrides (emit ALL hashes)
+      - name: Upload artifacts and write overrides (gated by content hash)
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
 
-          # Upload layers (no hash needed)
+          BUCKET="${{ env.LAMBDA_ARTIFACT_BUCKET }}"
+          CHECKSUM_PREFIX="checksums"  # S3 folder to store per-function content hashes
+
+          # Compute a stable content hash from source files under python/<func> (paths + file contents)
+          content_hash() {
+            local dir="$1"   # e.g., python/data_cleaner
+            mapfile -t files < <(cd "$dir" && \
+              find . -type f \
+                ! -path "*/__pycache__/*" \
+                ! -name "*.pyc" \
+                ! -path "*/.DS_Store" \
+                ! -path "*/.venv/*" \
+              | LC_ALL=C sort)
+            if [ "${#files[@]}" -eq 0 ]; then echo "EMPTY"; return; fi
+            tmp=$(mktemp)
+            (
+              cd "$dir"
+              for f in "${files[@]}"; do
+                printf "%s\0" "$f"
+                openssl dgst -sha256 -binary "$f" | openssl base64 -A
+                printf "\n"
+              done
+            ) > "$tmp"
+            openssl dgst -sha256 -binary "$tmp" | openssl base64 -A
+            rm -f "$tmp"
+          }
+
+          # Upload layers (no TF hash needed)
           if compgen -G "build/*_layer.zip" > /dev/null; then
             for zip in build/*_layer.zip; do
               base="$(basename "$zip" .zip)"; name="${base%_layer}"
-              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/layers/${name}.zip"
+              aws s3 cp "$zip" "s3://${BUCKET}/layers/${name}.zip"
             done
           fi
 
           echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
           first=1
 
-          # Upload ALL function zips, emit their hashes (deterministic = no unwanted updates)
+          # For each function zip, compare source content hash to prior run; only emit TF hash on change
           if compgen -G "build/*.zip" > /dev/null; then
             for zip in build/*.zip; do
               base="$(basename "$zip" .zip)"
               [[ "$base" == *_layer ]] && continue
-              aws s3 cp "$zip" "s3://${{ env.LAMBDA_ARTIFACT_BUCKET }}/lambdas/${base}.zip"
-              hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
-              if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
-              echo "  \"${base}\": { \"source_code_hash\": \"${hash}\" }" >> tfvars_out/source_code.tfvars.json
+              func="$base"
+              src_dir="python/${func}"
+
+              if [ ! -d "$src_dir" ]; then
+                # Fallback: no source dir found — upload & emit once
+                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+                zip_hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
+                if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+                echo "  \"${func}\": { \"source_code_hash\": \"${zip_hash}\" }" >> tfvars_out/source_code.tfvars.json
+                continue
+              fi
+
+              new_ch=$(content_hash "$src_dir") || new_ch=""
+              old_ch=""
+              if aws s3 cp "s3://${BUCKET}/${CHECKSUM_PREFIX}/${func}.sha256" /tmp/prev.sha256 2>/dev/null; then
+                old_ch="$(cat /tmp/prev.sha256 || true)"
+              fi
+
+              if [ -n "$new_ch" ] && [ "$new_ch" = "$old_ch" ]; then
+                echo "No source change for ${func}; uploading zip but NOT emitting TF hash."
+                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+              else
+                echo "Source change for ${func}; uploading & emitting TF hash."
+                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+                zip_hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
+                if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
+                echo "  \"${func}\": { \"source_code_hash\": \"${zip_hash}\" }" >> tfvars_out/source_code.tfvars.json
+                # Save new content hash for next run
+                printf "%s" "$new_ch" > /tmp/new.sha256
+                aws s3 cp /tmp/new.sha256 "s3://${BUCKET}/${CHECKSUM_PREFIX}/${func}.sha256" >/dev/null
+              fi
             done
           else
             echo "ERROR: no function zips found in build/" >&2
+            exit 1
           fi
 
           echo "} }" >> tfvars_out/source_code.tfvars.json
           echo "=== overrides JSON ==="
           cat tfvars_out/source_code.tfvars.json
+
 
 
       - name: Upload tfvars_out to Artifact
