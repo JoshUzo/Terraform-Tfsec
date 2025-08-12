@@ -2,21 +2,12 @@
 
 locals {
   s3_buckets = {
-    finesse = {
-      purpose = "finesse"
-    }
-    blue = {
-      purpose = "blue"
-    }
-    logs = {
-      purpose = "logs"
-    }
-    data = {
-      purpose = "data"
-    }
-   }
- }
-
+    hello = { purpose = "hello" }
+    blue  = { purpose = "blue"  }
+    logs  = { purpose = "logs"  }
+    data  = { purpose = "data"  }
+  }
+}
 
 module "s3_raw_data" {
   source            = "../modules/s3"
