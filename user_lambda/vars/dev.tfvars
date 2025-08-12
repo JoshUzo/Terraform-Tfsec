@@ -58,7 +58,7 @@ my_new_lambda = {
       STAGE = "dev"
     }
 
-    s3_key            = "lambdas/my_new_lambda.zip"
+    s3_key            = "lambdas/my_new_lamba.zip"
     #source_code_hash  = "REPLACE BY CICD"
 
     create_layer      = false
