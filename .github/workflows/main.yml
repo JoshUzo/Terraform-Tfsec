@@ -120,6 +120,10 @@ jobs:
           echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
 
       - name: Run SonarQube Scan (fail on bad gate)
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PROJECT_NAME: htown-sp-sonarqube
         run: |
           set -euo pipefail
           export SONAR_SCANNER_OPTS="-Xmx1G"
