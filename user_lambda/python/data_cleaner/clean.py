@@ -5,8 +5,8 @@ def handler(event, context):
         "First Name": "Alice",
         "Age": "30",
         "Email": None,
-        "EmptyList": ["first", "fifteen"],
-        "EmptyDict": {"help":"value9"},
+        "EmptyList": ["first", "sixteen"],
+        "EmptyDict": {"help":"value10"},
     }
 
     clean_data = remove_nulls(raw_data)
