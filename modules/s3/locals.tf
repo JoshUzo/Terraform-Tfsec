@@ -1,6 +1,6 @@
 locals {
   # Construct the bucket name from naming convention
-  bucket_name = "${var.organization}-${var.team}-${var.resource_type}-${var.purpose}-${var.env}"
+  bucket_name = "${var.organization}-${var.team}-${var.env}-${var.purpose}"
 
   # Default tags applied to resources
   default_tags = {

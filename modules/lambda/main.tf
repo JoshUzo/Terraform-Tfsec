@@ -53,7 +53,7 @@ resource "aws_lambda_layer_version" "this" {
 
   s3_bucket            = var.layer_s3_bucket
   s3_key               = var.layer_s3_key
-  layer_name           = "${var.organization}-${var.team}-layer-${var.purpose}-${var.env}"
+  layer_name           = "${var.organization}-${var.team}-layer-${var.env}-${var.purpose}"
   compatible_runtimes  = [var.runtime]
 }
 

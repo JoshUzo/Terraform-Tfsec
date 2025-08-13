@@ -1,4 +1,4 @@
-#new comment 86
+#new comment 87
 module "lambda_functions" {
   source = "../modules/lambda"
   for_each = local.lambda_configs
@@ -26,5 +26,4 @@ module "lambda_functions" {
   team          = var.team
   env           = var.env
   aws_region    = var.aws_region
-  resource_type = "lambda"
 }
