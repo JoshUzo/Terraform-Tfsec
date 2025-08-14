@@ -1,4 +1,4 @@
-# lambda_function.py
+# lambda_function.py update
 # !!! INTENTIONALLY INSECURE / BAD EXAMPLE FOR SONARQUBE TESTING ONLY !!!
 
 import os
