@@ -2,6 +2,11 @@
 name: Bootstrap Terraform State (GovCloud)
 
 on:
+ # Trigger workflow on pushes to main branch, but only if user folders change
+  push:
+    branches: [bootstrap]
+    paths:
+      - 'bootstrap' 
   workflow_dispatch:
 
 env:
