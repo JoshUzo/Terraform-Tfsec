@@ -1,0 +1,57 @@
+# .github/workflows/bootstrap.yml
+name: Bootstrap Terraform State (GovCloud)
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-2             # or us-gov-east-1
+  TF_BUCKET: test-tf-state-htown       # <-- change
+  TF_DDB:    tf-state-locking      # <-- change
+  TF_KEY:    global/bootstrap/terraform.tfstate
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest  # match your runner labels
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Configure AWS creds (GovCloud)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          # EITHER static keys:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # OR OIDC in GovCloud (preferred):
+          # role-to-assume: arn:aws-us-gov:iam::<ACCOUNT_ID>:role/<OIDC-ROLE>
+          # partition: aws-us-gov
+
+      # ---- Stage 1: create bucket & table using LOCAL backend
+      - name: Terraform Init (local backend)
+        working-directory: bootstrap
+        run: terraform init -backend=false
+
+      - name: Terraform Apply (create S3 + DynamoDB)
+        working-directory: bootstrap
+        run: |
+          terraform apply -auto-approve \
+            -var="region=${AWS_REGION}" \
+            -var="bucket_name=${TF_BUCKET}" \
+            -var="dynamodb_table=${TF_DDB}"
+
+      # ---- Stage 2: migrate state into the new S3 backend
+      - name: Migrate state to S3 backend
+        working-directory: bootstrap
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=${TF_BUCKET}" \
+            -backend-config="key=${TF_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TF_DDB}" \
+            -backend-config="encrypt=true"
+          terraform state list
+          echo "State successfully migrated to s3://${TF_BUCKET}/${TF_KEY}"
