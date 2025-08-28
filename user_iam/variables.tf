@@ -18,11 +18,6 @@ variable "env" {
   type        = string
 }
 
-variable "resource_type" {
-  description = "Type of resource (e.g., s3, rds, ec2)"
-  type        = string
-  default     = "iam"
-}
 
 variable "iam_roles" {
   type = map(object({

@@ -1,6 +1,6 @@
 locals {
   # Construct the IAM role name from naming convention
-  iam_role_name = var.iam_role_name != "" ? var.iam_role_name : "${var.organization}-${var.team}-${var.resource_type}-${var.purpose}-${var.env}"
+  iam_role_name = var.iam_role_name != "" ? var.iam_role_name : "${var.organization}-${var.team}-${var.env}-${var.purpose}"
 
   # Default tags applied to resources
   default_tags = {

@@ -1,17 +1,7 @@
 #this is mainv32
-
-locals {
-  s3_buckets = {
-    hello = { purpose = "hello" }
-    blue  = { purpose = "blue"  }
-    logs  = { purpose = "logs"  }
-    data  = { purpose = "data"  }
-  }
-}
-
 module "s3_raw_data" {
   source            = "../modules/s3"
-  for_each          = local.s3_buckets
+  for_each          = var.s3_buckets
 
   purpose           = each.value.purpose
   resource_type     = var.resource_type

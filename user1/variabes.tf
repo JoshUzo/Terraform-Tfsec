@@ -42,4 +42,10 @@ variable "resource_type" {
   default     = "s3"
 }
 
+variable "s3_buckets" {
+  type = map(object({
+    purpose = string
+  }))
+  description = "Map of S3 bucket configurations"
+}
 
