@@ -13,8 +13,8 @@ provider "aws" {
 }
 
 # S3 Bucket for Terraform State
-resource "aws_s3_bucket" "terraform_state" {
-  bucket        = "devops-tf-state-htown"
+resource "aws_s3_bucket" "terraform_state1" {
+  bucket        = "test-tf-state-htown"
   force_destroy = true
   tags = {
     Name        = "Terraform State Bucket"
@@ -23,7 +23,7 @@ resource "aws_s3_bucket" "terraform_state" {
 }
 
 # Enable Versioning (separate resource in AWS provider v5+)
-resource "aws_s3_bucket_versioning" "terraform_state_versioning" {
+resource "aws_s3_bucket_versioning" "terraform_state_versioning1" {
   bucket = aws_s3_bucket.terraform_state.id
 
   versioning_configuration {
@@ -32,7 +32,7 @@ resource "aws_s3_bucket_versioning" "terraform_state_versioning" {
 }
 
 # Enable SSE encryption (separate resource in AWS provider v5+)
-resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state_encryption" {
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state_encryption1" {
   bucket = aws_s3_bucket.terraform_state.id
 
   rule {
@@ -42,7 +42,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state_e
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "block_public" {
+resource "aws_s3_bucket_public_access_block" "block_public1" {
   bucket = aws_s3_bucket.terraform_state.id
 
   block_public_acls       = true
@@ -53,8 +53,8 @@ resource "aws_s3_bucket_public_access_block" "block_public" {
 
 
 # DynamoDB Table for State Locking
-resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "terraform-state-locking"
+resource "aws_dynamodb_table" "terraform_locks1" {
+  name         = "tf-state-locking"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
