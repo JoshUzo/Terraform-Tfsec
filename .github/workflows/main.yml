@@ -344,14 +344,10 @@ jobs:
         working-directory: ${{ matrix.folder }}
 
       - name: Terraform Plan
-        run: |
-          terraform plan \
-            -var-file="vars/dev.tfvars" \
-            -var-file="tfvars_out/lambdas.auto.tfvars.json" \
-            -var-file="tfvars_out/source_code.tfvars.json"
+        run: terraform plan -var-file="vars/dev.tfvars" -var-file="tfvars_out/lambdas.auto.tfvars.json" -var-file="tfvars_out/source_code.tfvars.json"
         working-directory: ${{ matrix.folder }}
 
-        
+
   # ===============================
   # Terraform Apply (manual approval)
   # ===============================
@@ -389,11 +385,9 @@ jobs:
         working-directory: ${{ matrix.folder }}
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve \
-              -var-file="vars/dev.tfvars" \
-              -var-file="tfvars_out/lambdas.auto.tfvars.json" \
-              -var-file="tfvars_out/source_code.tfvars.json"
+        run: terraform apply -auto-approve -var-file="vars/dev.tfvars" -var-file="tfvars_out/lambdas.auto.tfvars.json" -var-file="tfvars_out/source_code.tfvars.json"
         working-directory: ${{ matrix.folder }}
+
         
 
       
