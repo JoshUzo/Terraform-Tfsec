@@ -48,4 +48,19 @@ variable "lambda_artifact_bucket" {
   type        = string
 }
 
+variable "lambda_functions_autogen" {
+  description = "Functions discovered by CI from repo folders or manifests"
+  type = map(object({
+    purpose               = string
+    handler               = string
+    runtime               = string
+    role_arn              = string
+    environment_variables = map(string)
+    s3_key                = string
+    create_layer          = optional(bool)
+    layer_s3_key          = optional(string)
+    layers                = optional(list(string))
+  }))
+  default = {}
+}
 
