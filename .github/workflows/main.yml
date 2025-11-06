@@ -15,6 +15,8 @@ env:
       SQ_S3_BUCKET: sq-log-bucket
       PROJECT_NAME: htown-sp-sonarqube
       LAMBDA_ARTIFACT_BUCKET: htown-dev-lambda-artifacts
+      DEFAULT_ROLE_ARN: arn:aws:iam::211125625532:role/htown-sp-iam-etl-dev  # set this secret once
+
       
 jobs:
 
@@ -240,71 +242,93 @@ jobs:
           echo "=== overrides JSON ==="
           cat tfvars_out/source_code.tfvars.json
 
+ 
+
       - name: Build autogen tfvars from repo folders (lambda.yaml optional)
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
 
+          # ---- Defaults (used only when lambda.yaml omits a value) ----
           DEFAULT_RUNTIME="python3.12"
           DEFAULT_HANDLER="app.handler"
           DEFAULT_TIMEOUT=60
           DEFAULT_MEMORY=256
+          DEFAULT_ROLE_ARN="${DEFAULT_ROLE_ARN:-}"  # from job env above (secret-backed)
 
-          # Will populate var.lambda_functions_autogen
+          # Fail fast if we need a role but none is provided anywhere
+          if [ -z "${DEFAULT_ROLE_ARN}" ]; then
+          echo "WARNING: DEFAULT_ROLE_ARN is empty. Lambdas without lambda.yaml.role_arn will fail at apply."
+          fi
+
           echo '{ "lambda_functions_autogen": {' > tfvars_out/lambdas.auto.tfvars.json
           first=1
 
-          # Optional: use yq if lambda.yaml present
+          # yq is optional: only used if lambda.yaml present
           if ! command -v yq >/dev/null 2>&1; then
-            wget -q https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -O /usr/local/bin/yq || true
-            chmod +x /usr/local/bin/yq || true
+          wget -q https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -O /usr/local/bin/yq || true
+          chmod +x /usr/local/bin/yq || true
           fi
 
           shopt -s nullglob
           for fn_dir in python/*; do
-            [ -d "$fn_dir" ] || continue
-            name="$(basename "$fn_dir")"
+          [ -d "$fn_dir" ] || continue
+          name="$(basename "$fn_dir")"
 
-            yaml="$fn_dir/lambda.yaml"
-            if [ -f "$yaml" ] && command -v yq >/dev/null 2>&1; then
-              role_arn="$(yq -r '.role_arn // ""' "$yaml")"
-              handler="$(yq -r '.handler // ""' "$yaml")"
-              runtime="$(yq -r '.runtime // ""' "$yaml")"
-              timeout="$(yq -r '.timeout // ""' "$yaml")"
-              memory="$(yq -r '.memory_size // ""' "$yaml")"
-              layers="$(yq -o=json '.layers // []' "$yaml")"
-              envjson="$(yq -o=json '.environment // {}' "$yaml")"
-            else
-              role_arn=""
-              handler=""
-              runtime=""
-              timeout=""
-              memory=""
-              layers="[]"
-              envjson="{}"
-            fi
+          yaml="$fn_dir/lambda.yaml"
+          if [ -f "$yaml" ] && command -v yq >/dev/null 2>&1; then
+          role_arn="$(yq -r '.role_arn // ""' "$yaml")"
+          handler="$(yq -r '.handler // ""' "$yaml")"
+          runtime="$(yq -r '.runtime // ""' "$yaml")"
+          timeout="$(yq -r '.timeout // ""' "$yaml")"
+          memory="$(yq -r '.memory_size // ""' "$yaml")"
+          layers="$(yq -o=json '.layers // []' "$yaml")"
+          envjson="$(yq -o=json '.environment // {}' "$yaml")"
+          else
+          role_arn=""
+          handler=""
+          runtime=""
+          timeout=""
+          memory=""
+          layers="[]"
+          envjson="{}"
+          fi
 
-            handler="${handler:-$DEFAULT_HANDLER}"
-            runtime="${runtime:-$DEFAULT_RUNTIME}"
-            timeout="${timeout:-$DEFAULT_TIMEOUT}"
-            memory="${memory:-$DEFAULT_MEMORY}"
+          # ---- Apply defaults when fields are empty ----
+          handler="${handler:-$DEFAULT_HANDLER}"
+          runtime="${runtime:-$DEFAULT_RUNTIME}"
+          timeout="${timeout:-$DEFAULT_TIMEOUT}"
+          memory="${memory:-$DEFAULT_MEMORY}"
 
-            fn_s3_key="lambdas/${name}.zip"
-            layer_s3_key="layers/${name}.zip"
+          # <- THIS is the key: inject default role when missing
+          if [ -z "$role_arn" ] && [ -n "$DEFAULT_ROLE_ARN" ]; then
+           role_arn="$DEFAULT_ROLE_ARN"
+          fi
 
-            [ $first -eq 1 ] && first=0 || echo "," >> tfvars_out/lambdas.auto.tfvars.json
-            cat >> tfvars_out/lambdas.auto.tfvars.json <<EOF
+          # Optional guard: fail if still empty (prevents AWS 400)
+          if [ -z "$role_arn" ]; then
+           echo "ERROR: Lambda '$name' has no role_arn and DEFAULT_ROLE_ARN is not set."
+           exit 1
+          fi
+
+          fn_s3_key="lambdas/${name}.zip"
+          layer_s3_key="layers/${name}.zip"
+
+          [ $first -eq 1 ] && first=0 || echo "," >> tfvars_out/lambdas.auto.tfvars.json
+          cat >> tfvars_out/lambdas.auto.tfvars.json <<EOF
           "${name}": {
-           "purpose": "${name}",
-           "handler": "${handler}",
-           "runtime": "${runtime}",
-           "role_arn": "${role_arn}",
-           "environment_variables": ${envjson},
-           "s3_key": "${fn_s3_key}",
-           "create_layer": false,
-           "layer_s3_key": "${layer_s3_key}",
-           "layers": ${layers}
+          "purpose": "${name}",
+          "handler": "${handler}",
+          "runtime": "${runtime}",
+          "role_arn": "${role_arn}",
+          "environment_variables": ${envjson},
+          "s3_key": "${fn_s3_key}",
+          "create_layer": false,
+          "layer_s3_key": "${layer_s3_key}",
+          "layers": ${layers},
+          "timeout": ${timeout},
+          "memory_size": ${memory}
           }
           EOF
           done
@@ -312,6 +336,7 @@ jobs:
 
           echo "=== autogen tfvars ==="
           cat tfvars_out/lambdas.auto.tfvars.json
+
 
 
       # ---------------------------------------------------------
