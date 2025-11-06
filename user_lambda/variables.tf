@@ -54,7 +54,7 @@ variable "lambda_functions_autogen" {
     purpose               = string
     handler               = string
     runtime               = string
-    role_arn              = "arn:aws:iam::211125625532:role/htown-sp-iam-etl-dev"
+    role_arn              = string
     environment_variables = map(string)
     s3_key                = string
     create_layer          = optional(bool)
