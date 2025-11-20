@@ -1,0 +1,3 @@
+handler: main.handler
+timeout: 120
+memory_size: 512
