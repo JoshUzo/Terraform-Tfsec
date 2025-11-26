@@ -57,6 +57,8 @@ variable "lambda_functions_autogen" {
     role_arn              = string
     environment_variables = map(string)
     s3_key                = string
+    timeout               = number
+    memory_size           = number
     create_layer          = optional(bool)
     layer_s3_key          = optional(string)
     layers                = optional(list(string))

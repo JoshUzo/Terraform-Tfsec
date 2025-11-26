@@ -14,6 +14,8 @@ module "lambda_functions" {
 
 
   role_arn               = each.value.role_arn
+  timeout                = each.value.timeout
+  memory_size            = each.value.memory_size
   environment_variables  = each.value.environment_variables
   
 
