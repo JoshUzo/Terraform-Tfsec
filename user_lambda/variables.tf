@@ -34,6 +34,7 @@ variable "lambda_functions" {
       filter_suffix  = optional(string)
     }))
   }))
+  default = {}
 }
 
 variable "source_code_hashes" {
