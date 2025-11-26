@@ -3,6 +3,8 @@ resource "aws_lambda_function" "this" {
   handler          = var.handler
   runtime          = var.runtime
   role             = var.role_arn
+  timeout          = var.timeout
+  memory_size      = var.memory_size
   
 # Use S3-based source instead of local filename
   s3_bucket         = var.lambda_s3_bucket
