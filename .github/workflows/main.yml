@@ -350,7 +350,71 @@ jobs:
           echo '{ "source_code_hashes": {} }' > tfvars_out/source_code.tfvars.json
           echo '{ "lambda_functions_autogen": {} }' > tfvars_out/lambdas.auto.tfvars.json
 
+      # ===============================
+      # Security Scanning - Amazon Inspector
+      # ===============================
+      - name: Run Amazon Inspector scan
+        id: inspector
+        uses: aws-actions/vulnerability-scan-github-action-for-amazon-inspector@v1
+        with:
+          # Scan only this changed folder's code
+          artifact_type: 'repository'
+          artifact_path: './${{ matrix.folder }}'
+          display_vulnerability_findings: "enabled"
+          # Block pipeline if any HIGH/CRITICAL found
+          critical_threshold: 1
+          high_threshold: 1
+          medium_threshold: 0
+          low_threshold: 0
+          other_threshold: 0
 
+      - name: Upload Inspector results to S3
+        if: always()
+        env:
+          SQ_S3_BUCKET: ${{ env.SQ_S3_BUCKET }}
+          INSPECTOR_JSON: ${{ steps.inspector.outputs.inspector_scan_results }}
+          INSPECTOR_CSV: ${{ steps.inspector.outputs.inspector_scan_results_csv }}
+          INSPECTOR_SBOM: ${{ steps.inspector.outputs.artifact_sbom }}
+        run: |
+          timestamp=$(date +%Y%m%d-%H%M%S)
+          base="s3://${SQ_S3_BUCKET}/inspector/${{ matrix.folder }}/$timestamp"
+
+          echo "Uploading Amazon Inspector results for ${{ matrix.folder }} to $base"
+
+          if [ -f "$INSPECTOR_JSON" ]; then
+            aws s3 cp "$INSPECTOR_JSON" "$base/inspector-results.json"
+          else
+            echo "No JSON results found at $INSPECTOR_JSON"
+          fi
+
+          if [ -f "$INSPECTOR_CSV" ]; then
+            aws s3 cp "$INSPECTOR_CSV" "$base/inspector-results.csv"
+          else
+            echo "No CSV results found at $INSPECTOR_CSV"
+          fi
+
+          if [ -f "$INSPECTOR_SBOM" ]; then
+            aws s3 cp "$INSPECTOR_SBOM" "$base/inspector-sbom.json"
+          else
+            echo "No SBOM found at $INSPECTOR_SBOM"
+          fi
+
+      - name: Upload Inspector scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspector-results-${{ matrix.folder }}
+          path: |
+            ${{ steps.inspector.outputs.artifact_sbom }}
+            ${{ steps.inspector.outputs.inspector_scan_results }}
+            ${{ steps.inspector.outputs.inspector_scan_results_csv }}
+            ${{ steps.inspector.outputs.inspector_scan_results_markdown }}
+
+      - name: Fail if vulnerability threshold exceeded
+        # 0 = OK, 1 = threshold exceeded
+        run: exit ${{ steps.inspector.outputs.vulnerability_threshold_exceeded }}
+
+      
       # ===============================
       # Terraform Plan Stage
       # ===============================
