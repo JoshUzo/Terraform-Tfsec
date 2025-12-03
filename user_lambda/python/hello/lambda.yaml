@@ -1,6 +1,6 @@
 handler: main.handler
-timeout: 120
-memory_size: 512
+timeout: 30
+memory_size: 545
 role_arn: arn:aws:iam::211125625532:role/htown-sp-iam-audit-dev
 layers:
   - arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python39:30
