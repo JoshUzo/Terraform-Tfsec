@@ -351,68 +351,105 @@ jobs:
           echo '{ "lambda_functions_autogen": {} }' > tfvars_out/lambdas.auto.tfvars.json
 
       # ===============================
-      # Security Scanning - Amazon Inspector
+      # Security Scanning - Amazon Inspector (self-hosted, no Docker)
       # ===============================
-      - name: Run Amazon Inspector scan
+      - name: Download Inspector tools (sbomgen + jq) if needed
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          # --- inspector-sbomgen ---
+          if ! command -v inspector-sbomgen >/dev/null 2>&1; then
+            echo "Downloading inspector-sbomgen..."
+            wget -q https://amazon-inspector-sbomgen.s3.amazonaws.com/latest/linux/amd64/inspector-sbomgen.zip -O inspector-sbomgen.zip
+            unzip -q inspector-sbomgen.zip
+            # Grab the binary from the extracted directory
+            mv inspector-sbomgen-*/linux/amd64/inspector-sbomgen ./inspector-sbomgen
+            chmod +x ./inspector-sbomgen
+            # Make it available to later steps
+            echo "$GITHUB_WORKSPACE" >> "$GITHUB_PATH"
+          fi
+
+          # --- jq (for JSON parsing) ---
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "Downloading jq..."
+            wget -q https://github.com/stedolan/jq/releases/download/jq-1.7.1/jq-linux-amd64 -O jq
+            chmod +x jq
+            echo "$GITHUB_WORKSPACE" >> "$GITHUB_PATH"
+          fi
+
+          echo "Inspector tools installed:"
+          which inspector-sbomgen || true
+          which jq || true
+
+      - name: Generate SBOM and run Amazon Inspector scan
         id: inspector
-        uses: aws-actions/vulnerability-scan-github-action-for-amazon-inspector@v1
-        with:
-          # Scan only this changed folder's code
-          artifact_type: 'repository'
-          artifact_path: './${{ matrix.folder }}'
-          display_vulnerability_findings: "enabled"
-          # Block pipeline if any HIGH/CRITICAL found
-          critical_threshold: 1
-          high_threshold: 1
-          medium_threshold: 0
-          low_threshold: 0
-          other_threshold: 0
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          cd ${{ matrix.folder }}
+          mkdir -p security
+
+          REPORT="security/inspector-report.json"
+
+          # inspector-sbomgen will:
+          #  1) generate an SBOM for this directory
+          #  2) call the Inspector Scan API
+          #  3) write an INSPECTOR-format vulnerability report to $REPORT
+          inspector-sbomgen directory \
+            --path . \
+            --scan-sbom \
+            --scan-sbom-output-format inspector \
+            --aws-region "$AWS_REGION" \
+            --outfile "$REPORT"
+
+          echo "report_path=$REPORT" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce vulnerability thresholds (fail on any finding)
+        run: |
+          set -euo pipefail
+          cd ${{ matrix.folder }}
+          REPORT="${{ steps.inspector.outputs.report_path }}"
+
+          if [ ! -f "$REPORT" ]; then
+            echo "Inspector report not found at $REPORT"
+            exit 1
+          fi
+
+          echo "Inspector report at: $REPORT"
+          total=$(jq '.vulnerabilities | length' "$REPORT")
+          echo "Total vulnerabilities found: $total"
+
+          # For now: fail if ANY vulnerabilities exist.
+          # (You can later refine this once you inspect the JSON schema
+          #  and filter by severity if needed.)
+          if [ "$total" -gt 0 ]; then
+            echo "Amazon Inspector found $total vulnerabilities. Failing pipeline."
+            exit 1
+          else
+            echo "No vulnerabilities reported by Amazon Inspector."
+          fi
 
       - name: Upload Inspector results to S3
         if: always()
         env:
           SQ_S3_BUCKET: ${{ env.SQ_S3_BUCKET }}
-          INSPECTOR_JSON: ${{ steps.inspector.outputs.inspector_scan_results }}
-          INSPECTOR_CSV: ${{ steps.inspector.outputs.inspector_scan_results_csv }}
-          INSPECTOR_SBOM: ${{ steps.inspector.outputs.artifact_sbom }}
         run: |
+          set -euo pipefail
+          cd ${{ matrix.folder }}
+          REPORT="${{ steps.inspector.outputs.report_path }}"
+
           timestamp=$(date +%Y%m%d-%H%M%S)
           base="s3://${SQ_S3_BUCKET}/inspector/${{ matrix.folder }}/$timestamp"
+          echo "Uploading Amazon Inspector artifacts for ${{ matrix.folder }} to $base"
 
-          echo "Uploading Amazon Inspector results for ${{ matrix.folder }} to $base"
-
-          if [ -f "$INSPECTOR_JSON" ]; then
-            aws s3 cp "$INSPECTOR_JSON" "$base/inspector-results.json"
+          if [ -f "$REPORT" ]; then
+            aws s3 cp "$REPORT" "$base/inspector-report.json"
           else
-            echo "No JSON results found at $INSPECTOR_JSON"
+            echo "Inspector report not found at $REPORT, skipping upload."
           fi
 
-          if [ -f "$INSPECTOR_CSV" ]; then
-            aws s3 cp "$INSPECTOR_CSV" "$base/inspector-results.csv"
-          else
-            echo "No CSV results found at $INSPECTOR_CSV"
-          fi
-
-          if [ -f "$INSPECTOR_SBOM" ]; then
-            aws s3 cp "$INSPECTOR_SBOM" "$base/inspector-sbom.json"
-          else
-            echo "No SBOM found at $INSPECTOR_SBOM"
-          fi
-
-      - name: Upload Inspector scan artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: inspector-results-${{ matrix.folder }}
-          path: |
-            ${{ steps.inspector.outputs.artifact_sbom }}
-            ${{ steps.inspector.outputs.inspector_scan_results }}
-            ${{ steps.inspector.outputs.inspector_scan_results_csv }}
-            ${{ steps.inspector.outputs.inspector_scan_results_markdown }}
-
-      - name: Fail if vulnerability threshold exceeded
-        # 0 = OK, 1 = threshold exceeded
-        run: exit ${{ steps.inspector.outputs.vulnerability_threshold_exceeded }}
 
       
       # ===============================
