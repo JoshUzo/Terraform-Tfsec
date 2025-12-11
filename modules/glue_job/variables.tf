@@ -13,8 +13,8 @@ variable "env" {
   type        = string
 }
 
-variable "name" {
-  description = "Logical name of the Glue job (without prefixes/suffixes)"
+variable "purpose" {
+  description = "Functional purpose of the Lambda"
   type        = string
 }
 
@@ -74,10 +74,4 @@ variable "security_configuration" {
   description = "Name of an existing Glue Security Configuration to use (for encryption)"
   type        = string
   default     = null
-}
-
-variable "tags" {
-  description = "Tags to apply to the Glue job"
-  type        = map(string)
-  default     = {}
 }

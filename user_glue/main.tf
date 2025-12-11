@@ -7,7 +7,7 @@ module "glue_jobs" {
   team         = var.team
   env          = var.env
 
-  name            = each.key
+  purpose         = each.value.purpose
   role_arn        = each.value.role_arn
   script_location = each.value.script_location
 
