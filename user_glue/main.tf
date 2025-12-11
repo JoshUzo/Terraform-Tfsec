@@ -1,5 +1,5 @@
 module "glue_jobs" {
-  source = "../modules/glue"
+  source = "../modules/glue_job"
 
   for_each = local.merged_glue_jobs
 
