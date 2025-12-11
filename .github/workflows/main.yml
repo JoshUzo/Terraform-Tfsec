@@ -246,110 +246,118 @@ jobs:
           cat tfvars_out/source_code.tfvars.json
 
  
-            - name: Build Glue autogen tfvars from repo (glue.yaml optional)
-              if: matrix.folder == 'user_glue'
-              run: |
-                set -euo pipefail
-                cd ${{ matrix.folder }}
-                mkdir -p tfvars_out
+      - name: Build Glue autogen tfvars from repo folders (glue.yaml optional)
+        if: matrix.folder == 'user_glue'
+        run: |
+          set -euo pipefail
+          cd ${{ matrix.folder }}
+          mkdir -p tfvars_out
 
-                GLUE_SCRIPT_BUCKET="${GLUE_SCRIPT_BUCKET:-htown-dev-glue-scripts}"
-                DEFAULT_GLUE_ROLE_ARN="${DEFAULT_GLUE_ROLE_ARN:-}"   # set via env/secret if you want a default
+          # REQUIRED env values (fail fast so you know why)
+          GLUE_SCRIPT_BUCKET="${GLUE_SCRIPT_BUCKET:-}"
+          DEFAULT_GLUE_ROLE_ARN="${DEFAULT_GLUE_ROLE_ARN:-}"
 
-                # Defaults for Glue
-                DEFAULT_GLUE_VERSION="4.0"
-                DEFAULT_MAX_RETRIES=0
-                DEFAULT_TIMEOUT=60
-                DEFAULT_WORKER_TYPE="G.1X"
-                DEFAULT_NUM_WORKERS=2
+          if [ -z "$GLUE_SCRIPT_BUCKET" ]; then
+            echo "ERROR: GLUE_SCRIPT_BUCKET env var is empty."
+            exit 1
+          fi
 
-                # yq for parsing glue.yaml (same pattern as lambda)
-                if ! command -v yq >/dev/null 2>&1; then
-                  wget -q https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -O /usr/local/bin/yq || true
-                  chmod +x /usr/local/bin/yq || true
-                fi
+          # Defaults
+          DEFAULT_GLUE_VERSION="4.0"
+          DEFAULT_MAX_RETRIES=0
+          DEFAULT_TIMEOUT=60
+          DEFAULT_WORKER_TYPE="G.1X"
+          DEFAULT_NUM_WORKERS=2
 
-                echo '{ "glue_jobs_autogen": {' > tfvars_out/glue.auto.tfvars.json
-                first=1
+          # yq optional
+          if ! command -v yq >/dev/null 2>&1; then
+            wget -q https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -O /usr/local/bin/yq || true
+            chmod +x /usr/local/bin/yq || true
+          fi
 
-                shopt -s nullglob
-                for job_dir in scripts/*; do
-                  [ -d "$job_dir" ] || continue
-                  name="$(basename "$job_dir")"
+          # Always create file (even if no jobs)
+          echo '{ "glue_jobs_autogen": {' > tfvars_out/glue.auto.tfvars.json
+          first=1
 
-                  script_file="$job_dir/job.py"
-                  if [ ! -f "$script_file" ]; then
-                    echo "WARNING: no job.py found in $job_dir, skipping"
-                    continue
-                  fi
+          shopt -s nullglob
+          for job_dir in scripts/*; do
+            [ -d "$job_dir" ] || continue
+            name="$(basename "$job_dir")"
 
-                  # Upload script to S3
-                  s3_key="glue/${name}/job.py"
-                  aws s3 cp "$script_file" "s3://${GLUE_SCRIPT_BUCKET}/${s3_key}"
+            script_file="$job_dir/job.py"
+            if [ ! -f "$script_file" ]; then
+              echo "WARNING: no job.py found in $job_dir, skipping"
+              continue
+            fi
 
-                  glue_yaml="$job_dir/glue.yaml"
+            # Upload script to S3
+            s3_key="glue/${name}/job.py"
+            aws s3 cp "$script_file" "s3://${GLUE_SCRIPT_BUCKET}/${s3_key}"
+            script_location="s3://${GLUE_SCRIPT_BUCKET}/${s3_key}"
 
-                  role_arn=""
-                  glue_version=""
-                  max_retries=""
-                  timeout=""
-                  worker_type=""
-                  number_of_workers=""
-                  connections="[]"
-                  default_args="{}"
+            # Read glue.yaml overrides if present
+            glue_yaml="$job_dir/glue.yaml"
 
-                  if [ -f "$glue_yaml" ] && command -v yq >/dev/null 2>&1; then
-                    role_arn="$(yq -r '.role_arn // ""' "$glue_yaml")"
-                    glue_version="$(yq -r '.glue_version // ""' "$glue_yaml")"
-                    max_retries="$(yq -r '.max_retries // ""' "$glue_yaml")"
-                    timeout="$(yq -r '.timeout // ""' "$glue_yaml")"
-                    worker_type="$(yq -r '.worker_type // ""' "$glue_yaml")"
-                    number_of_workers="$(yq -r '.number_of_workers // ""' "$glue_yaml")"
-                    connections="$(yq -o=json '.connections // []' "$glue_yaml")"
-                    default_args="$(yq -o=json '.default_arguments // {}' "$glue_yaml")"
-                  fi
+            role_arn=""
+            glue_version=""
+            max_retries=""
+            timeout=""
+            worker_type=""
+            number_of_workers=""
+            connections="[]"
+            default_args="{}"
 
-                  # Apply defaults when missing
-                  glue_version="${glue_version:-$DEFAULT_GLUE_VERSION}"
-                  max_retries="${max_retries:-$DEFAULT_MAX_RETRIES}"
-                  timeout="${timeout:-$DEFAULT_TIMEOUT}"
-                  worker_type="${worker_type:-$DEFAULT_WORKER_TYPE}"
-                  number_of_workers="${number_of_workers:-$DEFAULT_NUM_WORKERS}"
+            if [ -f "$glue_yaml" ] && command -v yq >/dev/null 2>&1; then
+              role_arn="$(yq -r '.role_arn // ""' "$glue_yaml")"
+              glue_version="$(yq -r '.glue_version // ""' "$glue_yaml")"
+              max_retries="$(yq -r '.max_retries // ""' "$glue_yaml")"
+              timeout="$(yq -r '.timeout // ""' "$glue_yaml")"
+              worker_type="$(yq -r '.worker_type // ""' "$glue_yaml")"
+              number_of_workers="$(yq -r '.number_of_workers // ""' "$glue_yaml")"
+              connections="$(yq -o=json '.connections // []' "$glue_yaml")"
+              default_args="$(yq -o=json '.default_arguments // {}' "$glue_yaml")"
+            fi
 
-                  # Default role if none set
-                  if [ -z "$role_arn" ] && [ -n "$DEFAULT_GLUE_ROLE_ARN" ]; then
-                    role_arn="$DEFAULT_GLUE_ROLE_ARN"
-                  fi
+            # Apply defaults
+            glue_version="${glue_version:-$DEFAULT_GLUE_VERSION}"
+            max_retries="${max_retries:-$DEFAULT_MAX_RETRIES}"
+            timeout="${timeout:-$DEFAULT_TIMEOUT}"
+            worker_type="${worker_type:-$DEFAULT_WORKER_TYPE}"
+            number_of_workers="${number_of_workers:-$DEFAULT_NUM_WORKERS}"
 
-                  if [ -z "$role_arn" ]; then
-                    echo "ERROR: Glue job '$name' has no role_arn and DEFAULT_GLUE_ROLE_ARN is not set."
-                    exit 1
-                  fi
+            # Default role if none set
+            if [ -z "$role_arn" ] && [ -n "$DEFAULT_GLUE_ROLE_ARN" ]; then
+              role_arn="$DEFAULT_GLUE_ROLE_ARN"
+            fi
+            if [ -z "$role_arn" ]; then
+              echo "ERROR: Glue job '$name' has no role_arn and DEFAULT_GLUE_ROLE_ARN is not set."
+              exit 1
+            fi
 
-                  script_location="s3://${GLUE_SCRIPT_BUCKET}/${s3_key}"
+            [ $first -eq 1 ] && first=0 || echo "," >> tfvars_out/glue.auto.tfvars.json
+             cat >> tfvars_out/glue.auto.tfvars.json <<EOF
+             "${name}": {
+               "purpose": "${name}",
+               "script_location": "${script_location}",
+               "role_arn": "${role_arn}",
+               "glue_version": "${glue_version}",
+               "max_retries": ${max_retries},
+               "timeout": ${timeout},
+               "worker_type": "${worker_type}",
+               "number_of_workers": ${number_of_workers},
+               "default_arguments": ${default_args},
+               "connections": ${connections},
+               "security_configuration": null,
+               "tags": {}
+               }
+               EOF
+               done
 
-                  [ $first -eq 1 ] && first=0 || echo "," >> tfvars_out/glue.auto.tfvars.json
-                  cat >> tfvars_out/glue.auto.tfvars.json <<EOF
-                  "${name}": {
-                    "script_location": "${script_location}",
-                    "role_arn": "${role_arn}",
-                    "glue_version": "${glue_version}",
-                    "max_retries": ${max_retries},
-                    "timeout": ${timeout},
-                    "worker_type": "${worker_type}",
-                    "number_of_workers": ${number_of_workers},
-                    "default_arguments": ${default_args},
-                    "connections": ${connections},
-                    "security_configuration": null,
-                    "tags": {}
-                   }
-             EOF
-          done
+               echo "} }" >> tfvars_out/glue.auto.tfvars.json
 
-          echo "} }" >> tfvars_out/glue.auto.tfvars.json
-
-          echo "=== Glue autogen tfvars ==="
-          cat tfvars_out/glue.auto.tfvars.json
+               echo "=== Glue autogen tfvars ==="
+               ls -la tfvars_out
+               cat tfvars_out/glue.auto.tfvars.json
 
       - name: Write empty Glue overrides (no Glue jobs in this folder)
         if: matrix.folder == 'user_glue'
