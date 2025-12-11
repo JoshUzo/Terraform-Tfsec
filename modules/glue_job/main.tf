@@ -22,3 +22,4 @@ resource "aws_glue_job" "this" {
   security_configuration = var.security_configuration
 
   default_arguments = var.default_arguments
+  }
