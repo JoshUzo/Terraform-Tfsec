@@ -1,4 +1,4 @@
-#1
+#2
 import sys
 from awsglue.utils import getResolvedOptions
 from awsglue.context import GlueContext
