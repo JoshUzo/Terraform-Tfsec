@@ -1,6 +1,6 @@
 locals {
   # Standard naming convention for Glue Job name 
-  glue_job_name = "${var.organization}-${var.team}-glue-${var.purpose}-${var.env}"
+  glue_job_name = "${var.organization}-${var.team}-${var.purpose}-${var.env}"
 
   # Default tags applied to all Glue resources
   default_tags = {
