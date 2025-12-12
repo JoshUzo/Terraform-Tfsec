@@ -335,22 +335,24 @@ jobs:
             fi
 
             [ $first -eq 1 ] && first=0 || echo "," >> tfvars_out/glue.auto.tfvars.json
-             cat >> tfvars_out/glue.auto.tfvars.json <<EOF
-             "${name}": {
-               "purpose": "${name}",
-               "script_location": "${script_location}",
-               "role_arn": "${role_arn}",
-               "glue_version": "${glue_version}",
-               "max_retries": ${max_retries},
-               "timeout": ${timeout},
-               "worker_type": "${worker_type}",
-               "number_of_workers": ${number_of_workers},
-               "default_arguments": ${default_args},
-               "connections": ${connections},
-               "security_configuration": null,
-               "tags": {}
-               }
-               EOF
+
+            cat >> tfvars_out/glue.auto.tfvars.json <<EOF
+            "${name}": {
+            "purpose": "${name}",
+            "script_location": "${script_location}",
+            "role_arn": "${role_arn}",
+            "glue_version": "${glue_version}",
+            "max_retries": ${max_retries},
+            "timeout": ${timeout},
+            "worker_type": "${worker_type}",
+            "number_of_workers": ${number_of_workers},
+            "default_arguments": ${default_args},
+            "connections": ${connections},
+            "security_configuration": null,
+            "tags": {}
+          }
+          EOF
+
                done
 
                echo "} }" >> tfvars_out/glue.auto.tfvars.json
