@@ -80,11 +80,17 @@ jobs:
         id: detect-lambda
         run: |
           cd ${{ matrix.folder }}
-          if [ -d python ] || [ -d layers ]; then
-            echo "has_lambda=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_lambda=false" >> $GITHUB_OUTPUT
+          
+          has_lambda="false"
+          if [ -d "python" ] && compgen -G "python/*" > /dev/null; then
+            has_lambda="true"
           fi
+          if [ -d "nodejs" ] && compgen -G "nodejs/*" > /dev/null; then
+            has_lambda="true"
+          fi
+
+          echo "has_lambda=${has_lambda}" >> $GITHUB_OUTPUT
+          echo "Detected has_lambda=${has_lambda}"
 
 
       # ---------------------------------------------------------
@@ -97,37 +103,38 @@ jobs:
           cd ${{ matrix.folder }}
           mkdir -p build
 
-          # Function to normalize file modification times for reproducibility
           normalize_dir() {
             local dir="$1"
-            # Normalize mtimes of tracked files so zip timestamps are stable
             if git ls-files "$dir" >/dev/null 2>&1; then
               git ls-files "$dir" | xargs -I{} touch -t 200001010000 {}
             else
-              # Fallback if directory isn’t tracked (rare)
               find "$dir" -type f -print0 | xargs -0 -I{} touch -t 200001010000 {}
             fi
           }
-          
-          # Function to zip contents of a directory in a stable, sorted way
+
           make_zip() {
             # make_zip <src_dir> <zip_out>
             local src="$1"
             local out="$2"
-            # Build a sorted list of files, excluding noise
+
             mapfile -t files < <(cd "$src" && \
               find . -type f \
                 ! -path "*/__pycache__/*" \
                 ! -name "*.pyc" \
                 ! -path "*/.DS_Store" \
                 ! -path "*/.venv/*" \
+                ! -path "*/tests/*" \
+                ! -path "*/__tests__/*" \
+                ! -path "*/coverage/*" \
+                ! -name "*.test.js" \
+                ! -name "*.spec.js" \
               | LC_ALL=C sort)
-            # Create the zip with stable attrs (-X) and deterministic file order
+
             rm -f "$out"
             (cd "$src" && zip -X -q "$OLDPWD/$out" "${files[@]}")
           }
 
-          # Zip each Lambda function under python/
+          # -------- Python lambdas --------
           if [ -d python ]; then
             for dir in python/*; do
               [ -d "$dir" ] || continue
@@ -137,7 +144,30 @@ jobs:
             done
           fi
 
-          # Zip each Lambda layer under layers/
+          # -------- NodeJS lambdas --------
+          if [ -d nodejs ]; then
+            for dir in nodejs/*; do
+              [ -d "$dir" ] || continue
+              name=$(basename "$dir")
+
+              # Install production deps if package.json exists.
+              # Prefer yarn when yarn.lock exists.
+              if [ -f "$dir/package.json" ]; then
+                if [ -f "$dir/yarn.lock" ]; then
+                  (cd "$dir" && yarn install --frozen-lockfile --production)
+                elif [ -f "$dir/package-lock.json" ]; then
+                  (cd "$dir" && npm ci --omit=dev)
+                else
+                  (cd "$dir" && npm install --omit=dev)
+                fi
+              fi
+
+              normalize_dir "$dir"
+              make_zip "$dir" "build/${name}.zip"
+            done
+          fi
+
+          # -------- Layers (if you use them) --------
           if [ -d layers ]; then
             for dir in layers/*; do
               [ -d "$dir" ] || continue
@@ -147,7 +177,8 @@ jobs:
             done
           fi
 
-          echo "Built zips:"; ls -l build || true
+          echo "Built zips:"
+          ls -l build || true
 
       # ---------------------------------------------------------
       # Step 3: Upload artifacts to S3 and decide if TF should redeploy
@@ -160,18 +191,24 @@ jobs:
           mkdir -p tfvars_out
 
           BUCKET="${{ env.LAMBDA_ARTIFACT_BUCKET }}"
-          CHECKSUM_PREFIX="checksums"  # S3 folder to store per-function content hashes
+          CHECKSUM_PREFIX="checksums"
 
-          # Compute a stable content hash from source files under python/<func> (paths + file contents)
           content_hash() {
-            local dir="$1"   # e.g., python/data_cleaner
+            local dir="$1"   # e.g., python/data_cleaner OR nodejs/dummy_node_lambda
             mapfile -t files < <(cd "$dir" && \
               find . -type f \
                 ! -path "*/__pycache__/*" \
                 ! -name "*.pyc" \
                 ! -path "*/.DS_Store" \
                 ! -path "*/.venv/*" \
+                ! -path "*/node_modules/*" \
+                ! -path "*/tests/*" \
+                ! -path "*/__tests__/*" \
+                ! -path "*/coverage/*" \
+                ! -name "*.test.js" \
+                ! -name "*.spec.js" \
               | LC_ALL=C sort)
+
             if [ "${#files[@]}" -eq 0 ]; then echo "EMPTY"; return; fi
             tmp=$(mktemp)
             (
@@ -186,52 +223,56 @@ jobs:
             rm -f "$tmp"
           }
 
-          # Upload any Lambda layers to S3 (no TF redeploy needed for layers)
+          # Upload layers (not redeploy-gated here)
           if compgen -G "build/*_layer.zip" > /dev/null; then
             for zip in build/*_layer.zip; do
               base="$(basename "$zip" .zip)"; name="${base%_layer}"
               aws s3 cp "$zip" "s3://${BUCKET}/layers/${name}.zip"
             done
           fi
-          
-          # Prepare overrides JSON for Terraform
+
           echo '{ "source_code_hashes": {' > tfvars_out/source_code.tfvars.json
           first=1
 
-          # For each function zip, compare source content hash to prior run; only emit TF hash on change
           if compgen -G "build/*.zip" > /dev/null; then
             for zip in build/*.zip; do
               base="$(basename "$zip" .zip)"
               [[ "$base" == *_layer ]] && continue
               func="$base"
-              src_dir="python/${func}"
 
-              if [ ! -d "$src_dir" ]; then
-                # Fallback: no source dir found — upload & emit once
-                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+              # Find source directory in python/ or nodejs/
+              src_dir=""
+              if [ -d "python/${func}" ]; then
+                src_dir="python/${func}"
+              elif [ -d "nodejs/${func}" ]; then
+                src_dir="nodejs/${func}"
+              fi
+
+              # Always upload artifact to the same key
+              aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+
+              # If we can’t find source dir, emit TF hash once (forces update)
+              if [ -z "$src_dir" ] || [ ! -d "$src_dir" ]; then
                 zip_hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
                 if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
                 echo "  \"${func}\": { \"source_code_hash\": \"${zip_hash}\" }" >> tfvars_out/source_code.tfvars.json
                 continue
               fi
-              
-              # Compare new source hash to old one stored in S3
-              new_ch=$(content_hash "$src_dir") || new_ch=""
+
+              new_ch="$(content_hash "$src_dir" || true)"
               old_ch=""
               if aws s3 cp "s3://${BUCKET}/${CHECKSUM_PREFIX}/${func}.sha256" /tmp/prev.sha256 2>/dev/null; then
                 old_ch="$(cat /tmp/prev.sha256 || true)"
               fi
 
               if [ -n "$new_ch" ] && [ "$new_ch" = "$old_ch" ]; then
-                echo "No source change for ${func}; uploading zip but NOT emitting TF hash."
-                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+                echo "No source change for ${func}; NOT emitting TF hash."
               else
-                echo "Source change for ${func}; uploading & emitting TF hash."
-                aws s3 cp "$zip" "s3://${BUCKET}/lambdas/${base}.zip"
+                echo "Source change for ${func}; emitting TF hash."
                 zip_hash=$(openssl dgst -sha256 -binary "$zip" | openssl base64 -A)
                 if [ $first -eq 1 ]; then first=0; else echo "," >> tfvars_out/source_code.tfvars.json; fi
                 echo "  \"${func}\": { \"source_code_hash\": \"${zip_hash}\" }" >> tfvars_out/source_code.tfvars.json
-                # Save new content hash to S3 for next run
+
                 printf "%s" "$new_ch" > /tmp/new.sha256
                 aws s3 cp /tmp/new.sha256 "s3://${BUCKET}/${CHECKSUM_PREFIX}/${func}.sha256" >/dev/null
               fi
@@ -372,78 +413,83 @@ jobs:
 
 
       - name: Build autogen tfvars from repo folders (lambda.yaml optional)
+        if: steps.detect-lambda.outputs.has_lambda == 'true'
         run: |
           set -euo pipefail
           cd ${{ matrix.folder }}
           mkdir -p tfvars_out
 
-          # ---- Defaults (used only when lambda.yaml omits a value) ----
-          DEFAULT_RUNTIME="python3.12"
-          DEFAULT_HANDLER="app.handler"
           DEFAULT_TIMEOUT=60
           DEFAULT_MEMORY=256
-          DEFAULT_ROLE_ARN="${DEFAULT_ROLE_ARN:-}"  # from job env above (secret-backed)
+          DEFAULT_ROLE_ARN="${DEFAULT_ROLE_ARN:-}"
 
-          # Fail fast if we need a role but none is provided anywhere
           if [ -z "${DEFAULT_ROLE_ARN}" ]; then
-          echo "WARNING: DEFAULT_ROLE_ARN is empty. Lambdas without lambda.yaml.role_arn will fail at apply."
+            echo "WARNING: DEFAULT_ROLE_ARN is empty. Lambdas without lambda.yaml.role_arn will fail at apply."
           fi
 
           echo '{ "lambda_functions_autogen": {' > tfvars_out/lambdas.auto.tfvars.json
           first=1
 
-          # yq is optional: only used if lambda.yaml present
           if ! command -v yq >/dev/null 2>&1; then
-          wget -q https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -O /usr/local/bin/yq || true
-          chmod +x /usr/local/bin/yq || true
+            wget -q https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -O /usr/local/bin/yq || true
+            chmod +x /usr/local/bin/yq || true
           fi
 
           shopt -s nullglob
-          for fn_dir in python/*; do
-          [ -d "$fn_dir" ] || continue
-          name="$(basename "$fn_dir")"
 
-          yaml="$fn_dir/lambda.yaml"
-          if [ -f "$yaml" ] && command -v yq >/dev/null 2>&1; then
-          role_arn="$(yq -r '.role_arn // ""' "$yaml")"
-          handler="$(yq -r '.handler // ""' "$yaml")"
-          runtime="$(yq -r '.runtime // ""' "$yaml")"
-          timeout="$(yq -r '.timeout // ""' "$yaml")"
-          memory="$(yq -r '.memory_size // ""' "$yaml")"
-          layers="$(yq -o=json '.layers // []' "$yaml")"
-          envjson="$(yq -o=json '.environment // {}' "$yaml")"
-          else
-          role_arn=""
-          handler=""
-          runtime=""
-          timeout=""
-          memory=""
-          layers="[]"
-          envjson="{}"
-          fi
+          for runtime_dir in python nodejs; do
+            [ -d "$runtime_dir" ] || continue
 
-          # ---- Apply defaults when fields are empty ----
-          handler="${handler:-$DEFAULT_HANDLER}"
-          runtime="${runtime:-$DEFAULT_RUNTIME}"
-          timeout="${timeout:-$DEFAULT_TIMEOUT}"
-          memory="${memory:-$DEFAULT_MEMORY}"
+            # Per-runtime defaults
+            if [ "$runtime_dir" = "python" ]; then
+              DEFAULT_RUNTIME="python3.12"
+              DEFAULT_HANDLER="app.handler"
+            else
+              DEFAULT_RUNTIME="nodejs18.x"
+              DEFAULT_HANDLER="handler.handler"
+            fi
 
-          # <- THIS is the key: inject default role when missing
-          if [ -z "$role_arn" ] && [ -n "$DEFAULT_ROLE_ARN" ]; then
-           role_arn="$DEFAULT_ROLE_ARN"
-          fi
+            for fn_dir in "$runtime_dir"/*; do
+              [ -d "$fn_dir" ] || continue
+              name="$(basename "$fn_dir")"
+              yaml="$fn_dir/lambda.yaml"
 
-          # Optional guard: fail if still empty (prevents AWS 400)
-          if [ -z "$role_arn" ]; then
-           echo "ERROR: Lambda '$name' has no role_arn and DEFAULT_ROLE_ARN is not set."
-           exit 1
-          fi
+              if [ -f "$yaml" ] && command -v yq >/dev/null 2>&1; then
+                role_arn="$(yq -r '.role_arn // ""' "$yaml")"
+                handler="$(yq -r '.handler // ""' "$yaml")"
+                runtime="$(yq -r '.runtime // ""' "$yaml")"
+                timeout="$(yq -r '.timeout // ""' "$yaml")"
+                memory="$(yq -r '.memory_size // ""' "$yaml")"
+                layers="$(yq -o=json '.layers // []' "$yaml")"
+                envjson="$(yq -o=json '.environment // {}' "$yaml")"
+              else
+                role_arn=""
+                handler=""
+                runtime=""
+                timeout=""
+                memory=""
+                layers="[]"
+                envjson="{}"
+              fi
 
-          fn_s3_key="lambdas/${name}.zip"
-          layer_s3_key="layers/${name}.zip"
+              handler="${handler:-$DEFAULT_HANDLER}"
+              runtime="${runtime:-$DEFAULT_RUNTIME}"
+              timeout="${timeout:-$DEFAULT_TIMEOUT}"
+              memory="${memory:-$DEFAULT_MEMORY}"
 
-          [ $first -eq 1 ] && first=0 || echo "," >> tfvars_out/lambdas.auto.tfvars.json
-          cat >> tfvars_out/lambdas.auto.tfvars.json <<EOF
+              if [ -z "$role_arn" ] && [ -n "$DEFAULT_ROLE_ARN" ]; then
+                role_arn="$DEFAULT_ROLE_ARN"
+              fi
+              if [ -z "$role_arn" ]; then
+                echo "ERROR: Lambda '$name' has no role_arn and DEFAULT_ROLE_ARN is not set."
+                exit 1
+              fi
+
+              fn_s3_key="lambdas/${name}.zip"
+              layer_s3_key="layers/${name}.zip"
+
+              [ $first -eq 1 ] && first=0 || echo "," >> tfvars_out/lambdas.auto.tfvars.json
+              cat >> tfvars_out/lambdas.auto.tfvars.json <<EOF
           "${name}": {
           "purpose": "${name}",
           "handler": "${handler}",
@@ -458,13 +504,13 @@ jobs:
           "memory_size": ${memory}
           }
           EOF
+            done
           done
-          echo "} }" >> tfvars_out/lambdas.auto.tfvars.json
 
+          echo "} }" >> tfvars_out/lambdas.auto.tfvars.json
           echo "=== autogen tfvars ==="
           cat tfvars_out/lambdas.auto.tfvars.json
 
-      
 
       # ---------------------------------------------------------
       # Step 4: If no Lambda code exists, make an empty overrides file
