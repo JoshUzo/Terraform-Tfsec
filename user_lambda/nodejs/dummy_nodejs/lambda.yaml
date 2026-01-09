@@ -1,0 +1,5 @@
+lambda_name: dummy_node_lambda
+runtime: nodejs18.x
+handler: handler.handler
+timeout: 10
+memory_size: 128
