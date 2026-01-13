@@ -1,8 +1,3 @@
-variable "lambda_artifact_bucket" {
-  type        = string
-  description = "S3 bucket where Lambda and Layer ZIPs are stored"
-}
-
 variable "layers_to_publish" {
   type = map(object({
     s3_key              = string
