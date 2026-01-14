@@ -1,0 +1,5 @@
+lambda_name: simple_node
+runtime: nodejs18.x
+handler: handler.handler
+timeout: 10
+memory_size: 128
